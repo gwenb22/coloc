@@ -8,6 +8,7 @@ import { useModals } from '../components/Modals';
 import { TaskMRow, TaskRow } from '../components/TaskRow';
 import { Beige, DayChip, MRow, type Tone } from '../components/mobile';
 import { PrivateTaskModal } from '../components/Bedroom';
+import { nextDue } from '../lib/recurring';
 import type { PrivateTask } from '../types';
 import { addDays, addMonths, endOfMonth, fmtDate, fmtDateLong, MONTHS, range, startOfMonth, startOfWeek, today, WEEKDAYS_SHORT } from '../lib/dates';
 import { isOpen, makeIsLate } from '../lib/fairness';
@@ -90,8 +91,17 @@ export default function CalendarPage() {
     // Ma chambre : uniquement les tâches de la personne connectée (privées)
     if (show.room) {
       for (const x of data.private_tasks ?? []) {
-        if (x.done || !x.due_date || x.due_date < from || x.due_date > to) continue;
-        out.push({ key: 'priv-' + x.id, date: x.due_date, label: '🔒 ' + x.title, cls: cx('private', x.due_date < t && 'late'), sort: 1, onClick: () => setRoomTask(x) });
+        if (x.done || !x.due_date) continue;
+        // Échéance actuelle, puis les suivantes si la tâche se répète (chaque semaine / chaque mois)
+        const dates: string[] = [];
+        let d: string | null = x.due_date;
+        for (let i = 0; d && d <= to && i < 60; i++) {
+          if (d >= from) dates.push(d);
+          d = x.repeat === 'none' ? null : nextDue({ due_date: d, repeat: x.repeat }, d);
+        }
+        for (const d of dates) {
+          out.push({ key: `priv-${x.id}-${d}`, date: d, label: '🔒 ' + x.title, cls: cx('private', d === x.due_date && d < t && 'late', d !== x.due_date && 'virtual-private'), sort: 1, onClick: () => setRoomTask(x) });
+        }
       }
     }
     if (show.maintenance) {
@@ -117,6 +127,7 @@ export default function CalendarPage() {
     return out.sort((a, b) => a.sort - b.sort || a.label.localeCompare(b.label));
   }, [data, from, to, show, person, zoneF, statusF, t, personClass, isLate, openOccurrence, openExpense, openReimbursement, nav, name, toast]);
 
+  const roomDays = useMemo(() => new Set(events.filter((e) => e.key.startsWith('priv-')).map((e) => e.date)), [events]);
   const byDate = useMemo(() => {
     const m = new Map<ISODate, Ev[]>();
     for (const e of events) m.set(e.date, [...(m.get(e.date) ?? []), e]);
@@ -194,12 +205,13 @@ export default function CalendarPage() {
               {WEEKDAYS_SHORT.map((d) => <div key={d} className="dl">{d.replace(/^./, (c) => c.toUpperCase())}</div>)}
               {range(from, to).map((d) => d.slice(0, 7) !== cursor.slice(0, 7)
                 ? <span key={d} className="daychip blank" />
-                : <DayChip key={d} label={Number(d.slice(8))} tone={toneOfDay(d)} today={d === t} selected={d === cursor} late={lateOn(d)} onClick={() => setCursor(d)} title={fmtDateLong(d)} />)}
+                : <DayChip key={d} label={Number(d.slice(8))} tone={toneOfDay(d)} today={d === t} selected={d === cursor} late={lateOn(d)} onClick={() => setCursor(d)} title={fmtDateLong(d)} marker={roomDays.has(d)} />)}
             </div>
             <div className="legend-dots">
               {memberIds.map((m, i) => <span key={m}><i className={i === 0 ? 't-rose' : 't-vert'} />{name(m)}</span>)}
               <span><i className="t-bleu" />Partagé</span>
               <span><i style={{ background: 'var(--surface-3)' }} />Rien de prévu</span>
+              {show.room && <span><i className="t-lilas" style={{ boxShadow: 'inset 0 0 0 2px #111' }} />🔒 Ma chambre (toi seule)</span>}
             </div>
           </div>
           <div className="mcol">

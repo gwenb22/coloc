@@ -81,12 +81,15 @@ export function Columns({ items, height = 150 }: { items: { label: string; value
   );
 }
 
-export function DayChip({ label, tone = 'none', selected, today, late, onClick, title }: {
+export function DayChip({ label, tone = 'none', selected, today, late, onClick, title, marker }: {
   label: ReactNode; tone?: Tone; selected?: boolean; today?: boolean; late?: boolean; onClick?: () => void; title?: string;
+  /** petit point lilas : une tâche de « Ma chambre » ce jour-là */
+  marker?: boolean;
 }) {
   return (
     <button type="button" className={cx('daychip', `t-${tone}`, selected && 'sel', today && 'today', late && 'late')} onClick={onClick} aria-pressed={selected} title={title}>
       {label}
+      {marker && <span className="room-mark" aria-label="tâche de ma chambre" />}
     </button>
   );
 }
