@@ -35,12 +35,14 @@ Pour recevoir chaque matin dans l'application les tâches du jour, les retards, 
 
 ## 3. Récupérer les clés publiques
 
-**Project Settings → API** (ou **Data API**) :
-- **Project URL** → c'est `VITE_SUPABASE_URL`
-- **anon public** (ou **publishable**) **key** → c'est `VITE_SUPABASE_ANON_KEY`
+- **Project URL** (Project Settings → Data API, ou bouton **Connect** en haut du projet) → c'est `VITE_SUPABASE_URL`.
+  Copiez uniquement `https://xxxxxxxx.supabase.co`, **sans** `/rest/v1/` à la fin.
+- **Project Settings → API Keys** → c'est `VITE_SUPABASE_ANON_KEY` :
+  - de préférence l'onglet **Legacy API keys** → clé **`anon` `public`** (commence par `eyJ…`) ;
+  - sinon la **Publishable key** (`sb_publishable_…`).
 
-> ⚠️ Ne copiez **jamais** la clé `service_role` / `secret` : elle donne tous les droits et ne doit pas se retrouver dans le site.
-> La clé `anon` est faite pour être publique : la protection des données repose sur les règles RLS installées à l'étape 1.
+> ⚠️ Ne copiez **jamais** les **Secret keys** (`sb_secret_…`) ni la clé legacy `service_role` : elles donnent tous les droits et ne doivent pas se retrouver dans le site.
+> La clé publique est faite pour être visible : la protection des données repose sur les règles RLS installées à l'étape 1.
 
 ## 4. Publier sur GitHub Pages
 
