@@ -7,6 +7,8 @@ import { Empty, Icon } from '../components/ui';
 import { useModals } from '../components/Modals';
 import { TaskMRow, TaskRow } from '../components/TaskRow';
 import { Beige, DayChip, MRow, type Tone } from '../components/mobile';
+import { PrivateTaskModal } from '../components/Bedroom';
+import type { PrivateTask } from '../types';
 import { addDays, addMonths, endOfMonth, fmtDate, fmtDateLong, MONTHS, range, startOfMonth, startOfWeek, today, WEEKDAYS_SHORT } from '../lib/dates';
 import { isOpen, makeIsLate } from '../lib/fairness';
 import { templateDates } from '../lib/recurrence';
@@ -34,7 +36,8 @@ export default function CalendarPage() {
   const [zoneF, setZoneF] = useState<UUID | 'all'>('all');
   const [statusF, setStatusF] = useState<'all' | 'open' | 'done'>('all');
   const [showFilters, setShowFilters] = useState(false);
-  const [show, setShow] = useState({ tasks: true, forecast: true, maintenance: true, reimb: true, expenses: !!me?.ui_prefs?.calendar_show_expenses });
+  const [show, setShow] = useState({ tasks: true, forecast: true, room: true, maintenance: true, reimb: true, expenses: !!me?.ui_prefs?.calendar_show_expenses });
+  const [roomTask, setRoomTask] = useState<PrivateTask | null>(null);
   const isLate = makeIsLate(data.task_templates, t);
 
   const setView = (v: View) => {
@@ -82,6 +85,13 @@ export default function CalendarPage() {
           out.push({ key: `v-${tp.id}-${d}`, date: d, label: tp.name, cls: cx('virtual', tp.fixed_user && personClass(tp.fixed_user)), sort: 3,
             onClick: () => toast('Tâche non encore planifiée : générez la répartition de cette semaine dans Tâches > Répartition équitable.', 'info') });
         }
+      }
+    }
+    // Ma chambre : uniquement les tâches de la personne connectée (privées)
+    if (show.room) {
+      for (const x of data.private_tasks ?? []) {
+        if (x.done || !x.due_date || x.due_date < from || x.due_date > to) continue;
+        out.push({ key: 'priv-' + x.id, date: x.due_date, label: '🔒 ' + x.title, cls: cx('private', x.due_date < t && 'late'), sort: 1, onClick: () => setRoomTask(x) });
       }
     }
     if (show.maintenance) {
@@ -135,6 +145,7 @@ export default function CalendarPage() {
 
   return (
     <div className="mpage">
+      {roomTask && <PrivateTaskModal task={roomTask} onClose={() => setRoomTask(null)} />}
       <div className="sec-title">
         <h2 style={{ fontSize: 26 }}>{monthTitle}</h2>
         <div className="sec-right">
@@ -160,6 +171,7 @@ export default function CalendarPage() {
             <button className="chip" aria-pressed={show.maintenance} onClick={() => toggle('maintenance')}>Entretien</button>
             <button className="chip" aria-pressed={show.reimb} onClick={() => toggle('reimb')}>Remboursements</button>
             <button className="chip" aria-pressed={show.expenses} onClick={() => toggle('expenses')}>Dépenses</button>
+            <button className="chip" aria-pressed={show.room} onClick={() => toggle('room')}>Ma chambre 🔒</button>
             <select className="select" value={person} onChange={(e) => setPerson(e.target.value as UUID)} aria-label="Colocataire">
               <option value="all">Tout le monde</option>
               {data.members.map((m) => <option key={m.user_id} value={m.user_id}>{name(m.user_id)}{m.user_id === meId ? ' (vous)' : ''}</option>)}
@@ -284,7 +296,7 @@ function DayRows({ date, events, showLate, person }: { date: ISODate; events: Ev
     <>
       {late.map((o) => <TaskMRow key={o.id} o={o} late showPerson />)}
       {occs.map((o) => <TaskMRow key={o.id} o={o} late={isLate(o)} showPerson />)}
-      {others.map((e) => <MRow key={e.key} over={e.cls.includes('virtual') ? 'Prévision · pas encore planifiée' : e.cls.includes('maint') ? 'Entretien' : 'Argent'} title={e.label} onClick={e.onClick} />)}
+      {others.map((e) => <MRow key={e.key} over={e.cls.includes('private') ? 'Ma chambre · privé' : e.cls.includes('virtual') ? 'Prévision · pas encore planifiée' : e.cls.includes('maint') ? 'Entretien' : 'Argent'} title={e.label} onClick={e.onClick} />)}
     </>
   );
 }

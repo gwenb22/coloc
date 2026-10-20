@@ -1,5 +1,5 @@
 import type { ISODate, RecurringExpense, SplitInput, SplitMode, UUID } from '../types';
-import { endOfMonth, addMonths } from './dates';
+import { addDays, addMonths, endOfMonth } from './dates';
 
 /** Date d'échéance d'une dépense récurrente pour un mois donné (jour ramené à la fin du mois si besoin). */
 export function dateInMonth(monthStart: ISODate, day: number): ISODate {
@@ -50,4 +50,14 @@ export function describeSplit(mode: SplitMode, inputs: SplitInput[], name: (id: 
   if (mode === 'single') return `pour ${name(inputs[0]?.user_id)}`;
   if (mode === 'percent') return inputs.map((i) => `${name(i.user_id)} ${i.value ?? 0} %`).join(' · ');
   return 'montants fixes';
+}
+
+/** Prochaine échéance d'une tâche privée répétée, strictement après « from » (aujourd'hui par défaut). */
+export function nextDue(t: { due_date: ISODate | null; repeat: 'none' | 'weekly' | 'monthly' }, from: ISODate): ISODate | null {
+  if (!t.due_date || t.repeat === 'none') return null;
+  const day = Number(t.due_date.slice(8));
+  let d = t.due_date;
+  do d = t.repeat === 'weekly' ? addDays(d, 7) : dateInMonth(addMonths(d, 1), day);
+  while (d <= from);
+  return d;
 }

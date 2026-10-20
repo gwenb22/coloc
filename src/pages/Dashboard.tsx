@@ -6,6 +6,8 @@ import { Icon, Progress, Seg } from '../components/ui';
 import { SwapActions, useModals } from '../components/Modals';
 import { TaskMRow, TaskRow } from '../components/TaskRow';
 import { Beige, Columns, MRow, SectionTitle, StatPill } from '../components/mobile';
+import { PrivateRow, PrivateTaskModal } from '../components/Bedroom';
+import type { PrivateTask } from '../types';
 import { addDays, fmtDate, startOfWeek, today } from '../lib/dates';
 import { fairnessStats, isOpen, makeIsLate } from '../lib/fairness';
 import { computeBalances, formatMoney, settlement } from '../lib/money';
@@ -16,6 +18,7 @@ export default function Dashboard() {
   const { data, meId, memberIds, name, run, category } = useData();
   const { openTemplate, openExpense, openReimbursement, openShopping } = useModals();
   const [who, setWho] = useState<'me' | 'all'>('me');
+  const [roomTask, setRoomTask] = useState<PrivateTask | null>(null);
   const t = today();
   const isLate = makeIsLate(data.task_templates, t);
   const cur = data.household.currency;
@@ -29,6 +32,8 @@ export default function Dashboard() {
   const lastOpen = [...stack].reverse().find(isOpen);
   const upcoming = active.filter((o) => o.due_date > t && o.due_date <= addDays(t, 5) && isOpen(o) && mine(o)).sort((a, b) => a.due_date.localeCompare(b.due_date)).slice(0, 5);
   const proposals = data.task_occurrences.filter((o) => o.proposed && isOpen(o)).length;
+  // Ma chambre (privé) : ce qui est prévu aujourd'hui ou en retard
+  const myRoom = (data.private_tasks ?? []).filter((x) => !x.done && x.due_date && x.due_date <= t).sort((a, b) => a.due_date!.localeCompare(b.due_date!));
 
   const myOpen = data.task_occurrences.filter((o) => o.assigned_to === meId && !o.proposed && isOpen(o) && o.due_date <= t);
   const myLate = myOpen.filter((o) => isLate(o)).length;
@@ -98,6 +103,12 @@ export default function Dashboard() {
           ) : (
             <Beige><div className="empty-line">Rien à faire aujourd’hui 🎉</div></Beige>
           )}
+          {myRoom.length > 0 && (
+            <Beige title={<>Ma chambre <span className="xs muted">🔒 privé</span></>} action={<Link to="/taches?tab=chambre" className="pill sm">Tout voir</Link>}>
+              {myRoom.map((x) => <PrivateRow key={x.id} t={x} onOpen={setRoomTask} />)}
+            </Beige>
+          )}
+          {roomTask && <PrivateTaskModal task={roomTask} onClose={() => setRoomTask(null)} />}
           {upcoming.length > 0 && (
             <>
               <SectionTitle title="Prochains jours" right={<Link to="/taches">Tout voir</Link>} />

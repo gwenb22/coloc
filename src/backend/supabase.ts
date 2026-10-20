@@ -4,7 +4,7 @@ import { ConflictError, type AuthUser, type Backend, type DataTable, type Realti
 
 const HOUSE_TABLES: DataTable[] = [
   'zones', 'categories', 'task_templates', 'task_occurrences', 'unavailabilities', 'swap_requests', 'comments',
-  'expenses', 'expense_shares', 'recurring_expenses', 'reimbursements', 'budgets', 'shopping_items', 'stocks', 'maintenance',
+  'expenses', 'expense_shares', 'recurring_expenses', 'private_tasks', 'reimbursements', 'budgets', 'shopping_items', 'stocks', 'maintenance',
 ];
 
 /** Redirection après e-mail (confirmation, mot de passe oublié) : l'adresse actuelle de l'application. */
@@ -57,7 +57,8 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
       case 'expense_shares':
         return fetchAll(() => sb.from('expense_shares').select('*').eq('household_id', hid).order('expense_id'));
       case 'recurring_expenses':
-        // Table ajoutée par le correctif n°2 : si elle n'existe pas encore, l'application reste utilisable
+      case 'private_tasks':
+        // Tables ajoutées par les correctifs n°2 et n°4 : si elles n'existent pas encore, l'application reste utilisable
         return fetchAll(() => sb.from(table).select('*').eq('household_id', hid).order('id')).catch(() => []);
       default:
         return fetchAll(() => sb.from(table).select('*').eq('household_id', hid).order('id'));

@@ -11,7 +11,7 @@ import { ConflictError, type AuthUser, type Backend } from './types';
  * Reproduit les principales règles du serveur (parts exactes, anti-doublons, échanges, notifications).
  */
 
-const DB_KEY = 'coloc-demo-db-v3';
+const DB_KEY = 'coloc-demo-db-v4';
 const USER_KEY = 'coloc-demo-user';
 export const DEMO_USERS = [
   { id: 'd0000000-0000-4000-8000-00000000a1e5', email: 'alex@demo', name: 'Alex' },
@@ -32,7 +32,7 @@ function load(): DB {
     const raw = localStorage.getItem(DB_KEY);
     if (raw) {
       const d = JSON.parse(raw) as DB;
-      for (const t of ['recurring_expenses']) d[t] ??= [];
+      for (const t of ['recurring_expenses', 'private_tasks']) d[t] ??= [];
       return d;
     }
   } catch {
@@ -99,6 +99,7 @@ const DEFAULTS: Record<string, () => Row> = {
   swap_requests: () => ({ message: '', status: 'pending', responded_at: null }),
   comments: () => ({ user_id: uid() }),
   reimbursements: () => ({ note: '', status: 'done', created_by: uid() }),
+  private_tasks: () => ({ user_id: uid(), note: '', due_date: null, repeat: 'none', done: false, done_at: null }),
   recurring_expenses: () => ({ category_id: null, split_inputs: [], start_date: today(), end_date: null, last_generated: null, auto_validate: true, active: true, note: '', created_by: uid() }),
   budgets: () => ({ month: 0, category_limits: {} }),
   shopping_items: () => ({ quantity: 1, unit: '', category: 'Autres', priority: 'normal', assigned_to: null, status: 'to_buy', note: '', price_estimate_cents: null, stock_id: null, bought_at: null, bought_by: null, created_by: uid() }),
@@ -279,6 +280,8 @@ export function createDemoBackend(): Backend {
         zones: pick('zones'), categories: pick('categories'), task_templates: pick('task_templates'),
         task_occurrences: pick('task_occurrences'), unavailabilities: pick('unavailabilities'), swap_requests: pick('swap_requests'),
         comments: pick('comments'), expenses: pick('expenses'), expense_shares: pick('expense_shares'), recurring_expenses: pick('recurring_expenses'),
+        // Tâches privées : uniquement celles de la personne connectée (comme la règle RLS)
+        private_tasks: structuredClone(db.private_tasks.filter((x) => x.household_id === h && x.user_id === uid())),
         reimbursements: pick('reimbursements'), budgets: pick('budgets'), shopping_items: pick('shopping_items'),
         stocks: pick('stocks'), maintenance: pick('maintenance'),
         notifications: structuredClone(db.notifications.filter((n) => n.household_id === h && n.user_id === uid())),
@@ -361,7 +364,7 @@ function seed(): DB {
     ],
     profiles: DEMO_USERS.map((u) => ({ id: u.id, display_name: u.name, notif_prefs: {}, ui_prefs: {}, deleted: false, version: 1, created_at: now() })),
     zones: [], categories: [], task_templates: [], task_occurrences: [], unavailabilities: [], swap_requests: [], comments: [],
-    expenses: [], expense_shares: [], recurring_expenses: [], reimbursements: [], budgets: [], shopping_items: [], stocks: [], maintenance: [], notifications: [], activity_log: [],
+    expenses: [], expense_shares: [], recurring_expenses: [], private_tasks: [], reimbursements: [], budgets: [], shopping_items: [], stocks: [], maintenance: [], notifications: [], activity_log: [],
   };
   const zones = [['Cuisine', '🍳'], ['Salle de bain', '🛁'], ['WC', '🚽'], ['Salon', '🛋️'], ['Entrée', '🚪'], ['Balcon / terrasse', '🌿']];
   zones.forEach(([name, icon], i) => d.zones.push({ id: uuid(), household_id: h, name, icon, active: true, position: i + 1, version: 1 }));
@@ -483,6 +486,13 @@ function seed(): DB {
   d.maintenance.push({ id: uuid(), household_id: h, title: 'Ampoule de l’entrée grillée', description: 'Culot E27, 60 W équivalent.', category: 'Électricité', reported_at: addDays(t, -3), priority: 'normal', owner: B, due_date: addDays(t, 2), status: 'todo', created_by: A, created_at: now(), version: 1 });
   d.maintenance.push({ id: uuid(), household_id: h, title: 'Joint du robinet de la cuisine qui fuit', description: 'Goutte à goutte. Prévenir le propriétaire.', category: 'Plomberie', reported_at: addDays(t, -9), priority: 'high', owner: A, due_date: addDays(t, -1), status: 'in_progress', created_by: B, created_at: now(), version: 1 });
 
+  const priv = (user_id: string, title: string, due_date: string | null, repeat = 'none', note = '') =>
+    d.private_tasks.push({ id: uuid(), household_id: h, user_id, title, note, due_date, repeat, done: false, done_at: null, created_at: now(), version: 1 });
+  priv(A, 'Changer mes draps', t, 'weekly');
+  priv(A, 'Trier le linge à donner', addDays(t, 3), 'none', 'Sac pour l’association du quartier');
+  priv(A, 'Aspirer sous le lit', null);
+  priv(B, 'Ranger le bureau', addDays(t, 1));
+  priv(B, 'Aérer la couette', addDays(t, 4), 'monthly');
   d.notifications.push({ id: uuid(), household_id: h, user_id: A, type: 'expense', title: 'Nouvelle dépense : Produits ménagers', body: 'Sam a ajouté 18,35 €', link: '/budget', read_at: null, created_at: now() });
   d.notifications.push({ id: uuid(), household_id: h, user_id: B, type: 'stock', title: 'Bientôt épuisé : Papier toilette', body: 'Quantité : 3', link: '/courses', read_at: null, created_at: now() });
   return d;

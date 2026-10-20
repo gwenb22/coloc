@@ -604,3 +604,7 @@ img.auth-logo { border-radius: 14px; width: 60px; height: 60px; }
 .swatch.custom input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
 .group-task { padding: 6px 0; align-items: flex-start; }
 .group-task input { margin-top: 3px; flex-shrink: 0; }
+/* Ma chambre (privé) */
+.private-note { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-2); background: var(--lilas); color: #111; border-radius: 999px; padding: 8px 14px; align-self: flex-start; }
+.ev.private { background: var(--lilas); color: #111; }
+@media (max-width: 860px) { .cal-cell .ev.private { background: var(--lilas); } }

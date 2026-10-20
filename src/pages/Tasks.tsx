@@ -8,6 +8,7 @@ import { useModals } from '../components/Modals';
 import { TaskMRow, TaskRow } from '../components/TaskRow';
 import { Beige, Columns, DayChip, GroupBadge, MRow, SectionTitle } from '../components/mobile';
 import { GroupModal } from '../components/GroupModal';
+import { Bedroom } from '../components/Bedroom';
 import { groupColor, listGroups } from '../lib/groups';
 import { addDays, fmtDate, fmtDateLong, startOfWeek, today, toISO, WEEKDAYS_LONG } from '../lib/dates';
 import { coefs, EFFORT_LABEL, fairnessStats, isOpen, makeIsLate, occurrenceFields, planAssignments, weeklyEvolution, weightOf } from '../lib/fairness';
@@ -15,7 +16,7 @@ import { describeFrequency, templateDates } from '../lib/recurrence';
 import { centsCSV, download, toCSV } from '../lib/csv';
 import { cx, fmtMinutes, plural } from '../lib/util';
 
-type Tab = 'semaine' | 'repartition' | 'planning' | 'catalogue' | 'historique';
+type Tab = 'semaine' | 'chambre' | 'repartition' | 'planning' | 'catalogue' | 'historique';
 
 export default function Tasks() {
   const [params, setParams] = useSearchParams();
@@ -24,10 +25,11 @@ export default function Tasks() {
   return (
     <div className="mpage">
       <Tabs value={tab} onChange={(t) => go(t)} tabs={[
-        { value: 'semaine', label: 'Semaine' }, { value: 'repartition', label: 'Répartition' }, { value: 'planning', label: 'Liste' },
+        { value: 'semaine', label: 'Semaine' }, { value: 'chambre', label: 'Ma chambre 🔒' }, { value: 'repartition', label: 'Répartition' }, { value: 'planning', label: 'Liste' },
         { value: 'catalogue', label: 'Catalogue' }, { value: 'historique', label: 'Historique' },
       ]} />
       {tab === 'semaine' && <Week onPlan={(w) => go('repartition', { week: w })} />}
+      {tab === 'chambre' && <Bedroom />}
       {tab === 'repartition' && <Repartition initialWeek={params.get('week') ?? undefined} />}
       {tab === 'planning' && <Planning />}
       {tab === 'catalogue' && <Catalogue />}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TaskTemplate } from '../types';
 import { describeFrequency, templateDates } from './recurrence';
-import { dateInMonth, dueDates, nextDate, stableUuid } from './recurring';
+import { dateInMonth, dueDates, nextDate, nextDue, stableUuid } from './recurring';
 
 const tpl = (p: Partial<TaskTemplate>): TaskTemplate => ({
   id: 't', household_id: 'h', zone_id: null, name: 'x', description: '', instructions: '', frequency: 'monthly', weekdays: [6], month_week: 1, group_name: null,
@@ -33,4 +33,11 @@ describe('dépenses récurrentes', () => {
     expect(a).not.toBe(await stableUuid('r1:2026-04-30'));
     expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-5[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   });
+});
+
+describe('tâches privées répétées', () => {
+  it('hebdomadaire en retard : saute à la prochaine semaine après aujourd’hui', () => expect(nextDue({ due_date: '2026-10-06', repeat: 'weekly' }, '2026-10-20')).toBe('2026-10-27'));
+  it('mensuelle le 31 : ramenée au 30 novembre', () => expect(nextDue({ due_date: '2026-10-31', repeat: 'monthly' }, '2026-10-31')).toBe('2026-11-30'));
+  it('mensuelle : repart du jour de la dernière échéance', () => expect(nextDue({ due_date: '2026-11-30', repeat: 'monthly' }, '2026-11-30')).toBe('2026-12-30'));
+  it('sans répétition : rien', () => expect(nextDue({ due_date: '2026-10-20', repeat: 'none' }, '2026-10-20')).toBeNull());
 });

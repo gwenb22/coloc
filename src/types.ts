@@ -214,6 +214,21 @@ export interface RecurringExpense {
   version: number;
 }
 
+/** Tâche privée « Ma chambre » : visible uniquement par son autrice, hors répartition. */
+export interface PrivateTask {
+  id: UUID;
+  household_id: UUID;
+  user_id: UUID;
+  title: string;
+  note: string;
+  due_date: ISODate | null;
+  repeat: 'none' | 'weekly' | 'monthly';
+  done: boolean;
+  done_at: string | null;
+  created_at: string;
+  version: number;
+}
+
 export interface ExpenseShare {
   expense_id: UUID;
   household_id: UUID;
@@ -334,6 +349,7 @@ export interface HouseData {
   expenses: Expense[];
   expense_shares: ExpenseShare[];
   recurring_expenses: RecurringExpense[];
+  private_tasks: PrivateTask[];
   reimbursements: Reimbursement[];
   budgets: Budget[];
   shopping_items: ShoppingItem[];
