@@ -94,53 +94,64 @@ export function Bedroom() {
   const { data, run, meId } = useData();
   const [open, setOpen] = useState<PrivateTask | null | 'new'>(null);
   const [quick, setQuick] = useState('');
-  const [when, setWhen] = useState<'none' | 'today' | 'tomorrow' | 'weekend'>('none');
+  // Filtre de la liste ; il sert aussi de date pour l'ajout rapide
+  const [view, setView] = useState<'all' | 'today' | 'tomorrow' | 'weekend' | 'none'>('all');
   const t = today();
+  const wd = new Date(t + 'T12:00').getDay(); // 0 = dimanche … 6 = samedi
+  const weekend: [string, string] = wd === 6 ? [t, addDays(t, 1)] : wd === 0 ? [t, t] : [addDays(t, 6 - wd), addDays(t, 7 - wd)];
   const mine = data.private_tasks ?? [];
   const todo = mine.filter((x) => !x.done);
-  const late = todo.filter((x) => x.due_date && x.due_date < t).sort((a, b) => a.due_date!.localeCompare(b.due_date!));
+  const byDate = (a: PrivateTask, b: PrivateTask) => a.due_date!.localeCompare(b.due_date!);
+  const late = todo.filter((x) => x.due_date && x.due_date < t).sort(byDate);
   const now = todo.filter((x) => x.due_date === t);
-  const soon = todo.filter((x) => x.due_date && x.due_date > t).sort((a, b) => a.due_date!.localeCompare(b.due_date!));
+  const soon = todo.filter((x) => x.due_date && x.due_date > t).sort(byDate);
   const undated = todo.filter((x) => !x.due_date);
+  const tomorrow = todo.filter((x) => x.due_date === addDays(t, 1));
+  const we = todo.filter((x) => x.due_date && x.due_date >= weekend[0] && x.due_date <= weekend[1]).sort(byDate);
   const done = mine.filter((x) => x.done).sort((a, b) => (b.done_at ?? '').localeCompare(a.done_at ?? '')).slice(0, 10);
+  const counts = { all: todo.length, today: late.length + now.length, tomorrow: tomorrow.length, weekend: we.length, none: undated.length };
 
-  const quickDate = () => {
-    if (when === 'today') return t;
-    if (when === 'tomorrow') return addDays(t, 1);
-    if (when === 'weekend') { const wd = new Date(t + 'T12:00').getDay(); return addDays(t, wd === 6 ? 0 : wd === 0 ? 0 : 6 - wd); }
-    return null;
-  };
+  const addDate = () => (view === 'today' ? t : view === 'tomorrow' ? addDays(t, 1) : view === 'weekend' ? weekend[0] : null);
+  const placeholder = view === 'today' ? 'Ajouter pour aujourd’hui… (Entrée)' : view === 'tomorrow' ? 'Ajouter pour demain… (Entrée)'
+    : view === 'weekend' ? 'Ajouter pour ce week-end… (Entrée)' : 'Ajouter… (Entrée)';
   const add = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!quick.trim()) return;
-    const r = await run(() => backend.insert('private_tasks', { household_id: data.household.id, user_id: meId, title: quick.trim(), due_date: quickDate() }), { tables: ['private_tasks'], key: 'priv-quick' });
+    const r = await run(() => backend.insert('private_tasks', { household_id: data.household.id, user_id: meId, title: quick.trim(), due_date: addDate() }), { tables: ['private_tasks'], key: 'priv-quick' });
     if (r) setQuick('');
   };
   const block = (title: string, list: PrivateTask[]) => list.length > 0 && (
     <Beige title={title}>{list.map((x) => <PrivateRow key={x.id} t={x} onOpen={setOpen} />)}</Beige>
   );
+  const empty = { all: 'Rien à faire dans ta chambre 🎉', today: 'Rien de prévu aujourd’hui 🎉', tomorrow: 'Rien de prévu demain.', weekend: 'Rien de prévu ce week-end.', none: 'Aucune tâche sans date.' }[view];
 
   return (
     <>
       <div className="private-note"><Icon name="lock" size={14} />Ta chambre est privée : ta colocataire ne voit pas ces tâches, et elles ne comptent pas dans l’équilibre.</div>
       <div className="mgrid">
         <div className="mcol">
-          <form className="stack-sm" onSubmit={add}>
-            <div className="row">
-              <input className="input" style={{ borderRadius: 999, background: 'var(--surface-2)', borderColor: 'transparent' }} value={quick} onChange={(e) => setQuick(e.target.value)} placeholder="Ajouter… (Entrée)" aria-label="Nouvelle tâche de ma chambre" maxLength={120} />
-              <button className="round-btn" style={{ background: 'var(--accent)', color: 'var(--on-accent)', borderColor: 'transparent', flexShrink: 0 }} aria-label="Ajouter"><Icon name="plus" size={18} /></button>
-            </div>
-            <div className="hscroll">
-              {([['none', 'Sans date'], ['today', 'Aujourd’hui'], ['tomorrow', 'Demain'], ['weekend', 'Ce week-end']] as const).map(([v, l]) => (
-                <button key={v} type="button" className="pill sm" aria-pressed={when === v} onClick={() => setWhen(v)}>{l}</button>
-              ))}
-            </div>
+          <div className="hscroll" role="group" aria-label="Filtrer mes tâches">
+            {([['all', 'Tout'], ['today', 'Aujourd’hui'], ['tomorrow', 'Demain'], ['weekend', 'Ce week-end'], ['none', 'Sans date']] as const).map(([v, l]) => (
+              <button key={v} type="button" className="pill sm" aria-pressed={view === v} onClick={() => setView(v)}>
+                {l}{counts[v] > 0 && <span className="pill-count">{counts[v]}</span>}
+              </button>
+            ))}
+          </div>
+          <form className="row" onSubmit={add}>
+            <input className="input" style={{ borderRadius: 999, background: 'var(--surface-2)', borderColor: 'transparent' }} value={quick} onChange={(e) => setQuick(e.target.value)} placeholder={placeholder} aria-label="Nouvelle tâche de ma chambre" maxLength={120} />
+            <button className="round-btn" style={{ background: 'var(--accent)', color: 'var(--on-accent)', borderColor: 'transparent', flexShrink: 0 }} aria-label="Ajouter"><Icon name="plus" size={18} /></button>
           </form>
-          {block(`En retard · ${late.length}`, late)}
-          {block('Aujourd’hui', now)}
-          {block('À venir', soon)}
-          {block('Sans date', undated)}
-          {todo.length === 0 && <Beige><div className="empty-line">Rien à faire dans ta chambre 🎉</div></Beige>}
+          {view === 'all' && <>
+            {block(`En retard · ${late.length}`, late)}
+            {block('Aujourd’hui', now)}
+            {block('À venir', soon)}
+            {block('Sans date', undated)}
+          </>}
+          {view === 'today' && <>{block(`En retard · ${late.length}`, late)}{block('Aujourd’hui', now)}</>}
+          {view === 'tomorrow' && block('Demain', tomorrow)}
+          {view === 'weekend' && block(wd === 0 ? 'Aujourd’hui (dimanche)' : 'Samedi et dimanche', we)}
+          {view === 'none' && block('Sans date', undated)}
+          {counts[view] === 0 && <Beige><div className="empty-line">{empty}</div></Beige>}
           <button className="btn btn-primary btn-big" onClick={() => setOpen('new')}><Icon name="plus" />Nouvelle tâche (date, répétition…)</button>
         </div>
         <div className="mcol">
