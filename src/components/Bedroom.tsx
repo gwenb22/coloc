@@ -42,6 +42,7 @@ export function PrivateRow({ t, onOpen }: { t: PrivateTask; onOpen: (t: PrivateT
 export function PrivateTaskModal({ task, defaultDate, onClose }: { task: PrivateTask | null; defaultDate?: string | null; onClose: () => void }) {
   const { data, run, meId } = useData();
   const confirm = useConfirm();
+  const toggle = usePrivateToggle();
   const [title, setTitle] = useState(task?.title ?? '');
   const [note, setNote] = useState(task?.note ?? '');
   const [date, setDate] = useState(task?.due_date ?? defaultDate ?? '');
@@ -69,6 +70,7 @@ export function PrivateTaskModal({ task, defaultDate, onClose }: { task: Private
     <Modal title={task ? 'Ma chambre · tâche' : 'Ma chambre · nouvelle tâche'} onClose={onClose} footer={
       <>
         {task && <button className="btn btn-danger" style={{ marginRight: 'auto' }} onClick={remove}>Supprimer</button>}
+        {task && <button className="btn" onClick={async () => { if (await toggle(task)) onClose(); }}><Icon name={task.done ? 'undo' : 'check'} size={15} />{task.done ? 'Rouvrir' : 'C’est fait'}</button>}
         <button className="btn" onClick={onClose}>Annuler</button>
         <button className="btn btn-primary" onClick={save}>Enregistrer</button>
       </>

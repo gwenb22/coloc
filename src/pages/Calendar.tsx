@@ -7,7 +7,7 @@ import { Empty, Icon } from '../components/ui';
 import { useModals } from '../components/Modals';
 import { TaskMRow, TaskRow } from '../components/TaskRow';
 import { Beige, DayChip, MRow, type Tone } from '../components/mobile';
-import { PrivateTaskModal } from '../components/Bedroom';
+import { PrivateRow, PrivateTaskModal } from '../components/Bedroom';
 import { nextDue } from '../lib/recurring';
 import type { PrivateTask } from '../types';
 import { addDays, addMonths, endOfMonth, fmtDate, fmtDateLong, MONTHS, range, startOfMonth, startOfWeek, today, WEEKDAYS_SHORT } from '../lib/dates';
@@ -24,6 +24,9 @@ interface Ev {
   cls: string;
   onClick: () => void;
   sort: number;
+  /** tâche de « Ma chambre » ; current = échéance actuelle (cochable), sinon répétition à venir */
+  priv?: PrivateTask;
+  current?: boolean;
 }
 
 export default function CalendarPage() {
@@ -91,7 +94,12 @@ export default function CalendarPage() {
     // Ma chambre : uniquement les tâches de la personne connectée (privées)
     if (show.room) {
       for (const x of data.private_tasks ?? []) {
-        if (x.done || !x.due_date) continue;
+        if (!x.due_date) continue;
+        // Une tâche déjà faite reste visible (cochée) à sa date, sans répétitions affichées
+        if (x.done) {
+          if (x.due_date >= from && x.due_date <= to) out.push({ key: `priv-${x.id}-${x.due_date}`, date: x.due_date, label: '🔒 ' + x.title, cls: 'private done', sort: 2, onClick: () => setRoomTask(x), priv: x, current: true });
+          continue;
+        }
         // Échéance actuelle, puis les suivantes si la tâche se répète (chaque semaine / chaque mois)
         const dates: string[] = [];
         let d: string | null = x.due_date;
@@ -100,7 +108,7 @@ export default function CalendarPage() {
           d = x.repeat === 'none' ? null : nextDue({ due_date: d, repeat: x.repeat }, d);
         }
         for (const d of dates) {
-          out.push({ key: `priv-${x.id}-${d}`, date: d, label: '🔒 ' + x.title, cls: cx('private', d === x.due_date && d < t && 'late', d !== x.due_date && 'virtual-private'), sort: 1, onClick: () => setRoomTask(x) });
+          out.push({ key: `priv-${x.id}-${d}`, date: d, label: '🔒 ' + x.title, cls: cx('private', d === x.due_date && d < t && 'late', d !== x.due_date && 'virtual-private'), sort: 1, onClick: () => setRoomTask(x), priv: x, current: d === x.due_date });
         }
       }
     }
@@ -285,7 +293,9 @@ function DayList({ date, events, showLate, person, onlyLate }: { date: ISODate; 
       {late.length > 0 && <div className="list-group-title" style={{ color: 'var(--danger)' }}>En retard · {late.length}</div>}
       {late.map((o) => <TaskRow key={o.id} o={o} late />)}
       {!onlyLate && occs.map((o) => <TaskRow key={o!.id} o={o!} late={isLate(o!)} showDate={false} />)}
-      {!onlyLate && others.map((e) => (
+      {!onlyLate && others.map((e) => e.priv ? (
+        <div key={e.key} style={{ padding: '0 20px' }}><RoomRow e={e} /></div>
+      ) : (
         <div key={e.key} className="list-item clickable" onClick={e.onClick}>
           <span className={cx('ev', e.cls)} style={{ width: 'auto', flex: 1, fontSize: 14, padding: '6px 10px' }}>{e.label}</span>
         </div>
@@ -308,7 +318,14 @@ function DayRows({ date, events, showLate, person }: { date: ISODate; events: Ev
     <>
       {late.map((o) => <TaskMRow key={o.id} o={o} late showPerson />)}
       {occs.map((o) => <TaskMRow key={o.id} o={o} late={isLate(o)} showPerson />)}
-      {others.map((e) => <MRow key={e.key} over={e.cls.includes('private') ? 'Ma chambre · privé' : e.cls.includes('virtual') ? 'Prévision · pas encore planifiée' : e.cls.includes('maint') ? 'Entretien' : 'Argent'} title={e.label} onClick={e.onClick} />)}
+      {others.map((e) => e.priv ? <RoomRow key={e.key} e={e} /> : <MRow key={e.key} over={e.cls.includes('private') ? 'Ma chambre · privé' : e.cls.includes('virtual') ? 'Prévision · pas encore planifiée' : e.cls.includes('maint') ? 'Entretien' : 'Argent'} title={e.label} onClick={e.onClick} />)}
     </>
   );
+}
+
+/** Tâche de « Ma chambre » dans une liste du jour : cochable à son échéance, informative pour une répétition à venir. */
+function RoomRow({ e }: { e: Ev }) {
+  const t = e.priv!;
+  if (e.current) return <PrivateRow t={t} onOpen={() => e.onClick()} />;
+  return <MRow over={<>🔒 Ma chambre · prochaine fois{t.repeat === 'weekly' ? ' (chaque semaine)' : ' (chaque mois)'}</>} title={t.title} onClick={e.onClick} />;
 }
