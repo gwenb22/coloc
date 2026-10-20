@@ -3,6 +3,8 @@ import { backend } from '../backend';
 import { useData } from '../store';
 import type { Effort, Expense, Frequency, Occurrence, RecurringExpense, Reimbursement, ShoppingItem, SplitMode, TaskTemplate, UUID } from '../types';
 import { RecurringModal } from './RecurringModal';
+import { GroupBadge } from './mobile';
+import { groupColor, listGroups } from '../lib/groups';
 import { Field, Icon, Modal, Person, PersonSelect, Seg, StatusBadge, useConfirm } from './ui';
 import { addDays, fmtDate, fmtDateLong, fmtDateTime, today, WEEKDAYS_LONG, WEEKDAYS_SHORT } from '../lib/dates';
 import { coefs, EFFORT_LABEL, fairnessStats, isOpen, makeIsLate, occurrenceFields, weightOf } from '../lib/fairness';
@@ -113,6 +115,7 @@ function OccurrenceModal({ id, onClose }: { id: UUID; onClose: () => void }) {
     }>
       <div className="row-wrap">
         <StatusBadge status={o.status} late={late} proposed={o.proposed} />
+        {tpl?.group_name && <GroupBadge name={tpl.group_name} color={groupColor(data, tpl.group_name)} />}
         {o.locked && <span className="badge"><Icon name="lock" size={12} />Attribution verrouillée</span>}
         {pendingSwap && <span className="badge warning"><Icon name="swap" size={12} />Échange en attente</span>}
         {o.problem && <span className="badge danger"><Icon name="alert" size={12} />Problème signalé</span>}
@@ -272,7 +275,7 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
   const { data, run, memberIds, meId } = useData();
   const confirm = useConfirm();
   const zones = data.zones.filter((z) => z.active || z.id === tpl?.zone_id).sort((a, b) => a.position - b.position);
-  const groups = [...new Set(data.task_templates.map((t) => t.group_name?.trim()).filter((g): g is string => !!g))].sort();
+  const groups = listGroups(data).map((g) => g.name);
   const [f, setF] = useState<Partial<TaskTemplate>>(() => tpl ? { ...tpl } : {
     name: '', zone_id: zones[0]?.id ?? null, frequency: 'weekly', weekdays: [6], once_date: today(), duration_min: 15, effort: 'moderate',
     preferred_user: null, fixed_user: null, start_date: today(), end_date: null, description: '', instructions: '', window_days: 0, active: true, ...defaults,
@@ -420,9 +423,12 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
       <div className="form-section">
         <h4>Attribution</h4>
         <div className="form-grid">
-          <Field label="Groupe (facultatif)" className="full" hint="Les tâches d’un même groupe tombant le même jour sont données à la même personne, même dans des pièces différentes (ex. : Sols, Linge). Les tâches d’une même pièce le même jour sont déjà regroupées automatiquement.">
-            <input className="input" list="task-groups" value={f.group_name ?? ''} onChange={(e) => set('group_name', e.target.value)} placeholder="Aucun" maxLength={40} />
-            <datalist id="task-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
+          <Field label="Groupe (facultatif)" className="full" hint="Même jour, même personne, même dans des pièces différentes. Créez ou modifiez les groupes (nom, couleur, tâches) dans Tâches → Catalogue → Groupes.">
+            <select className="select" value={f.group_name ?? ''} onChange={(e) => set('group_name', e.target.value || null)}>
+              <option value="">Aucun groupe</option>
+              {groups.map((g) => <option key={g} value={g}>{g}</option>)}
+              {f.group_name && !groups.includes(f.group_name) && <option value={f.group_name}>{f.group_name}</option>}
+            </select>
           </Field>
           <Field label="Personne préférée" hint="Favorisée à charge proche"><PersonSelect value={f.preferred_user ?? null} allowNone noneLabel="Aucune" onChange={(v) => set('preferred_user', v)} /></Field>
           <Field label="Attribution fixe" hint="Toujours la même personne"><PersonSelect value={f.fixed_user ?? null} allowNone noneLabel="Non (répartition automatique)" onChange={(v) => set('fixed_user', v)} /></Field>

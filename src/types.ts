@@ -42,6 +42,8 @@ export interface HouseholdSettings {
   window_weeks?: number;
   /** regrouper les tâches d'une même pièce le même jour (par défaut : oui) */
   group_by_zone?: boolean;
+  /** groupes de tâches nommés et leur couleur (la clé est le nom exact) */
+  groups?: Record<string, { color: string }>;
 }
 
 export interface Household {

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Icon } from './ui';
 import { cx } from '../lib/util';
+import { inkFor } from '../lib/groups';
 
 // Briques d'interface reprises de la maquette Figma (cartes beiges, lignes simples, colonnes, puces de jours).
 
@@ -88,4 +89,11 @@ export function DayChip({ label, tone = 'none', selected, today, late, onClick, 
       {label}
     </button>
   );
+}
+
+/** Étiquette de groupe de tâches, à la couleur choisie. */
+export function GroupBadge({ name, color }: { name: string; color: string | null }) {
+  const bg = color ?? '#DCD3FF';
+  const fg = inkFor(bg);
+  return <span className="badge group-badge" style={{ background: bg, color: fg }}>{name}</span>;
 }

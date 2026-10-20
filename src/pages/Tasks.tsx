@@ -6,8 +6,10 @@ import type { Occurrence, OccStatus, TaskTemplate, UUID } from '../types';
 import { Empty, Icon, Person, PersonSelect, Seg, StatusBadge, STATUS_LABEL, Tabs, useConfirm } from '../components/ui';
 import { useModals } from '../components/Modals';
 import { TaskMRow, TaskRow } from '../components/TaskRow';
-import { Beige, Columns, DayChip, SectionTitle } from '../components/mobile';
-import { addDays, fmtDate, fmtDateLong, startOfWeek, today, toISO } from '../lib/dates';
+import { Beige, Columns, DayChip, GroupBadge, MRow, SectionTitle } from '../components/mobile';
+import { GroupModal } from '../components/GroupModal';
+import { groupColor, listGroups } from '../lib/groups';
+import { addDays, fmtDate, fmtDateLong, startOfWeek, today, toISO, WEEKDAYS_LONG } from '../lib/dates';
 import { coefs, EFFORT_LABEL, fairnessStats, isOpen, makeIsLate, occurrenceFields, planAssignments, weeklyEvolution, weightOf } from '../lib/fairness';
 import { describeFrequency, templateDates } from '../lib/recurrence';
 import { centsCSV, download, toCSV } from '../lib/csv';
@@ -301,7 +303,7 @@ function Repartition({ initialWeek }: { initialWeek?: string }) {
                   <div key={o.id} className={cx('list-item', o.proposed && 'is-proposed', o.status === 'done' && 'is-done')}>
                     <div className="grow" style={{ cursor: 'pointer' }} onClick={() => openOccurrence(o.id)}>
                       <div className="title ellipsis">{o.name}</div>
-                      <div className="meta">{zone(o.zone_id)?.icon} {zone(o.zone_id)?.name} · {fmtMinutes(o.estimated_min)} · {Number(o.weight)} pts</div>
+                      <div className="meta">{zone(o.zone_id)?.icon} {zone(o.zone_id)?.name} · {fmtMinutes(o.estimated_min)} · {Number(o.weight)} pts{(() => { const g = data.task_templates.find((t) => t.id === o.template_id)?.group_name; return g ? <> <GroupBadge name={g} color={groupColor(data, g)} /></> : null; })()}</div>
                     </div>
                     {o.proposed ? <span className="badge accent hide-sm">Proposée</span> : <span className="hide-sm"><StatusBadge status={o.status} /></span>}
                     {isOpen(o) ? (
@@ -416,9 +418,28 @@ function Catalogue() {
   const orphan = tpls.filter((tp) => !zones.some((z) => z.id === tp.zone_id));
   const weekly = (tp: TaskTemplate) => (tp.frequency === 'daily' ? 7 : tp.frequency === 'weekly' ? (tp.weekdays.length || 1) : tp.frequency === 'monthly' ? 12 / 52 : 0) * weightOf(tp.duration_min, tp.effort, c);
   const totalWeekly = data.task_templates.filter((tp) => tp.active && !tp.archived).reduce((a, tp) => a + weekly(tp), 0);
+  const taskGroups = listGroups(data);
+  const [editGroup, setEditGroup] = useState<string | null | 'new'>(null);
 
   return (
     <div className="stack">
+      {!showArchived && (
+        <Beige title="Groupes" action={<button className="pill dark sm" onClick={() => setEditGroup('new')}><Icon name="plus" size={14} />Nouveau groupe</button>}>
+          <p className="small muted" style={{ paddingBottom: 6 }}>Les tâches d’un groupe qui tombent le même jour vont à la même personne. Les tâches d’une même pièce le même jour sont regroupées automatiquement (désactivable dans Paramètres).</p>
+          {taskGroups.length === 0 && <div className="empty-line">Aucun groupe pour l’instant.</div>}
+          {taskGroups.map((g) => {
+            const members = data.task_templates.filter((t) => !t.archived && t.group_name?.trim().toLowerCase() === g.name.toLowerCase());
+            const days = [...new Set(members.filter((t) => t.frequency !== 'daily' && t.frequency !== 'once').flatMap((t) => t.weekdays))].sort();
+            return (
+              <MRow key={g.name} onClick={() => setEditGroup(g.name)}
+                over={<>{g.count} tâche{g.count > 1 ? 's' : ''}{days.length ? ` · ${days.map((d) => WEEKDAYS_LONG[d - 1]).join(', ')}` : ''}</>}
+                title={<GroupBadge name={g.name} color={g.color} />}
+                right={<span className="xs muted ellipsis" style={{ maxWidth: '45%' }}>{members.map((t) => t.name).join(' · ')}</span>} />
+            );
+          })}
+        </Beige>
+      )}
+      {editGroup !== null && <GroupModal group={editGroup === 'new' ? null : editGroup} onClose={() => setEditGroup(null)} />}
       <div className="row-wrap">
         <button className="pill dark" onClick={() => openTemplate(null)}><Icon name="plus" size={16} />Tâche récurrente</button>
         <button className="pill" onClick={() => openTemplate(null, { frequency: 'once', once_date: today() })}><Icon name="plus" size={16} />Tâche ponctuelle</button>
@@ -442,7 +463,7 @@ function Catalogue() {
                   <div className="meta">
                     <span>{describeFrequency(tp)}</span><span>{fmtMinutes(tp.duration_min)}</span><span>effort {EFFORT_LABEL[tp.effort].toLowerCase()}</span>
                     <span>{weightOf(tp.duration_min, tp.effort, c)} pts</span>
-                    {tp.group_name && <span className="badge accent">groupe {tp.group_name}</span>}
+                    {tp.group_name && <GroupBadge name={tp.group_name} color={groupColor(data, tp.group_name)} />}
                     {tp.fixed_user && <span>toujours {name(tp.fixed_user)}</span>}
                     {tp.preferred_user && !tp.fixed_user && <span>préférence {name(tp.preferred_user)}</span>}
                     {tp.end_date && <span>jusqu’au {fmtDate(tp.end_date)}</span>}
