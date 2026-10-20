@@ -272,6 +272,7 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
   const { data, run, memberIds, meId } = useData();
   const confirm = useConfirm();
   const zones = data.zones.filter((z) => z.active || z.id === tpl?.zone_id).sort((a, b) => a.position - b.position);
+  const groups = [...new Set(data.task_templates.map((t) => t.group_name?.trim()).filter((g): g is string => !!g))].sort();
   const [f, setF] = useState<Partial<TaskTemplate>>(() => tpl ? { ...tpl } : {
     name: '', zone_id: zones[0]?.id ?? null, frequency: 'weekly', weekdays: [6], once_date: today(), duration_min: 15, effort: 'moderate',
     preferred_user: null, fixed_user: null, start_date: today(), end_date: null, description: '', instructions: '', window_days: 0, active: true, ...defaults,
@@ -292,6 +293,8 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
     if (f.end_date && f.start_date && f.end_date < f.start_date) return setErr('La date de fin précède la date de début.');
     const payload: Partial<TaskTemplate> = {
       name: f.name.trim(), zone_id: f.zone_id, frequency: f.frequency, weekdays: f.frequency === 'weekly' ? [...(f.weekdays ?? [])].sort() : f.frequency === 'monthly' ? [f.weekdays?.[0] ?? 6] : [],
+      // group_name / month_week ne sont envoyés que si utiles (compatibilité avec une base sans les correctifs)
+      ...(f.group_name?.trim() || (tpl && tpl.group_name != null) ? { group_name: f.group_name?.trim() || null } : {}),
       // month_week n'est envoyé que si utile (compatibilité avec une base sans le correctif n°2)
       ...(f.frequency === 'monthly' || (tpl && tpl.month_week != null) ? { month_week: f.frequency === 'monthly' ? f.month_week ?? 1 : null } : {}),
       once_date: f.frequency === 'once' ? f.once_date : null, duration_min: Number(f.duration_min), effort: f.effort, preferred_user: f.preferred_user || null,
@@ -417,6 +420,10 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
       <div className="form-section">
         <h4>Attribution</h4>
         <div className="form-grid">
+          <Field label="Groupe (facultatif)" className="full" hint="Les tâches d’un même groupe tombant le même jour sont données à la même personne, même dans des pièces différentes (ex. : Sols, Linge). Les tâches d’une même pièce le même jour sont déjà regroupées automatiquement.">
+            <input className="input" list="task-groups" value={f.group_name ?? ''} onChange={(e) => set('group_name', e.target.value)} placeholder="Aucun" maxLength={40} />
+            <datalist id="task-groups">{groups.map((g) => <option key={g} value={g} />)}</datalist>
+          </Field>
           <Field label="Personne préférée" hint="Favorisée à charge proche"><PersonSelect value={f.preferred_user ?? null} allowNone noneLabel="Aucune" onChange={(v) => set('preferred_user', v)} /></Field>
           <Field label="Attribution fixe" hint="Toujours la même personne"><PersonSelect value={f.fixed_user ?? null} allowNone noneLabel="Non (répartition automatique)" onChange={(v) => set('fixed_user', v)} /></Field>
           {f.frequency !== 'once' && (

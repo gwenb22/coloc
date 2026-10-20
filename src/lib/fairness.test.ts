@@ -4,7 +4,7 @@ import { fairnessStats, planAssignments, weightOf } from './fairness';
 
 const A = 'a', B = 'b';
 const tpl = (id: string, p: Partial<TaskTemplate>): TaskTemplate => ({
-  id, household_id: 'h', zone_id: null, name: id, description: '', instructions: '', frequency: 'weekly', weekdays: [1], month_week: null,
+  id, household_id: 'h', zone_id: null, name: id, description: '', instructions: '', frequency: 'weekly', weekdays: [1], month_week: null, group_name: null,
   once_date: null, window_days: 0, duration_min: 10, effort: 'light', preferred_user: null, fixed_user: null,
   start_date: '2026-01-01', end_date: null, active: true, archived: false, created_by: null, created_at: '', version: 1, ...p,
 });
@@ -78,5 +78,44 @@ describe('fairnessStats', () => {
     expect(s.per[B].weighted).toBe(10);
     expect(s.gap).toBe(20);
     expect(s.per[A].done).toBe(1);
+  });
+});
+
+describe('regroupements', () => {
+  const who = (r: ReturnType<typeof planAssignments>, id: string) => r.slots.find((s) => s.template_id === id)!.assigned_to;
+  it('même pièce, même jour → même personne', () => {
+    const templates = [
+      tpl('douche', { zone_id: 'sdb', weekdays: [6], duration_min: 20, effort: 'heavy' }),
+      tpl('lavabo', { zone_id: 'sdb', weekdays: [6], duration_min: 10 }),
+      tpl('plaques', { zone_id: 'cuisine', weekdays: [6], duration_min: 10 }),
+      tpl('frigo', { zone_id: 'cuisine', weekdays: [6], duration_min: 25, effort: 'heavy' }),
+    ];
+    const r = planAssignments({ ...base, templates, occurrences: [] });
+    expect(who(r, 'douche')).toBe(who(r, 'lavabo'));
+    expect(who(r, 'plaques')).toBe(who(r, 'frigo'));
+    expect(who(r, 'douche')).not.toBe(who(r, 'frigo')); // les deux blocs sont répartis entre les deux personnes
+  });
+  it('groupe nommé : pièces différentes, même personne, prioritaire sur la pièce', () => {
+    const templates = [
+      tpl('sol-cuisine', { zone_id: 'cuisine', weekdays: [6], group_name: 'Sols' }),
+      tpl('sol-sdb', { zone_id: 'sdb', weekdays: [6], group_name: 'Sols' }),
+      tpl('aspirer', { zone_id: 'salon', weekdays: [6], group_name: 'sols' }),
+      tpl('douche', { zone_id: 'sdb', weekdays: [6], duration_min: 30, effort: 'heavy' }),
+    ];
+    const r = planAssignments({ ...base, templates, occurrences: [] });
+    expect(new Set(['sol-cuisine', 'sol-sdb', 'aspirer'].map((id) => who(r, id))).size).toBe(1);
+    expect(who(r, 'douche')).not.toBe(who(r, 'sol-sdb'));
+    expect(r.slots.find((s) => s.template_id === 'aspirer')!.reason).toContain('sols');
+  });
+  it('une tâche verrouillée entraîne le reste de son bloc', () => {
+    const templates = [tpl('a', { zone_id: 'sdb', weekdays: [6] }), tpl('b', { zone_id: 'sdb', weekdays: [6], duration_min: 50 })];
+    const locked = occ({ template_id: 'a', scheduled_date: '2026-10-24', due_date: '2026-10-24', assigned_to: B, locked: true, status: 'todo' });
+    const r = planAssignments({ ...base, templates, occurrences: [locked, occ({ due_date: '2026-10-10', assigned_to: B, weight: 200 })] });
+    expect(who(r, 'b')).toBe(B);
+  });
+  it('regroupement par pièce désactivable', () => {
+    const templates = [tpl('x', { zone_id: 'sdb', weekdays: [6], duration_min: 30 }), tpl('y', { zone_id: 'sdb', weekdays: [6], duration_min: 30 })];
+    const r = planAssignments({ ...base, settings: { group_by_zone: false }, templates, occurrences: [] });
+    expect(who(r, 'x')).not.toBe(who(r, 'y'));
   });
 });

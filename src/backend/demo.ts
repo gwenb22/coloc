@@ -11,7 +11,7 @@ import { ConflictError, type AuthUser, type Backend } from './types';
  * Reproduit les principales règles du serveur (parts exactes, anti-doublons, échanges, notifications).
  */
 
-const DB_KEY = 'coloc-demo-db-v2';
+const DB_KEY = 'coloc-demo-db-v3';
 const USER_KEY = 'coloc-demo-user';
 export const DEMO_USERS = [
   { id: 'd0000000-0000-4000-8000-00000000a1e5', email: 'alex@demo', name: 'Alex' },
@@ -93,7 +93,7 @@ function log(h: string, entity: string, entity_id: string | null, action: string
 const DEFAULTS: Record<string, () => Row> = {
   zones: () => ({ icon: '🏠', active: true, position: 0 }),
   categories: () => ({ position: 0, archived: false }),
-  task_templates: () => ({ description: '', instructions: '', weekdays: [], month_week: null, once_date: null, window_days: 0, effort: 'moderate', preferred_user: null, fixed_user: null, start_date: today(), end_date: null, active: true, archived: false, created_by: uid() }),
+  task_templates: () => ({ description: '', instructions: '', weekdays: [], month_week: null, group_name: null, once_date: null, window_days: 0, effort: 'moderate', preferred_user: null, fixed_user: null, start_date: today(), end_date: null, active: true, archived: false, created_by: uid() }),
   task_occurrences: () => ({ status: 'todo', proposed: false, locked: false, done_at: null, done_by: null, actual_min: null, problem: null }),
   unavailabilities: () => ({ note: '' }),
   swap_requests: () => ({ message: '', status: 'pending', responded_at: null }),
@@ -372,19 +372,23 @@ function seed(): DB {
     .forEach((name, i) => d.categories.push({ id: uuid(), household_id: h, kind: 'shopping', name, position: i + 1, archived: false, version: 1 }));
   const cat = (n: string) => d.categories.find((c) => c.name === n && c.kind === 'expense')!.id;
 
-  const tpls: [string, string, 'daily' | 'weekly', number[], number, 'light' | 'moderate' | 'heavy', string?][] = [
-    ['Cuisine', 'Vaisselle et plans de travail', 'daily', [], 15, 'light', 'Éponge propre, liquide vaisselle. Essuyer et ranger.'],
-    ['Cuisine', 'Sortir les poubelles', 'weekly', [1, 4], 5, 'light', 'Tri : jaune le lundi, verre le jeudi.'],
-    ['Cuisine', 'Nettoyer les plaques', 'weekly', [3], 10, 'moderate'],
-    ['Cuisine', 'Laver le sol de la cuisine', 'weekly', [6], 15, 'moderate'],
-    ['Salle de bain', 'Nettoyer la douche', 'weekly', [6], 20, 'heavy', 'Anticalcaire, rincer, raclette.'],
-    ['Salle de bain', 'Lavabo et miroir', 'weekly', [3], 10, 'light'],
-    ['Salle de bain', 'Sol de la salle de bain', 'weekly', [6], 10, 'moderate'],
-    ['WC', 'Nettoyer la cuvette et désinfecter', 'weekly', [2, 6], 10, 'heavy', 'Gants, gel WC, désinfectant surfaces.'],
-    ['Salon', 'Ranger et dépoussiérer', 'weekly', [5], 15, 'light'],
-    ['Salon', 'Aspirer le salon', 'weekly', [6], 20, 'moderate'],
-    ['Entrée', 'Ranger les chaussures et nettoyer le sol', 'weekly', [7], 10, 'light'],
-    ['Balcon / terrasse', 'Balayer le balcon', 'weekly', [7], 15, 'moderate'],
+  const tpls: [string, string, 'daily' | 'weekly', number[], number, 'light' | 'moderate' | 'heavy', string, string | null][] = [
+    ['Cuisine', 'Vaisselle et plans de travail', 'daily', [], 15, 'light', 'Éponge propre, liquide vaisselle. Essuyer et ranger.', null],
+    ['Cuisine', 'Sortir les poubelles', 'weekly', [1, 4], 5, 'light', 'Tri : jaune le lundi, verre le jeudi.', null],
+    ['Cuisine', 'Nettoyer les plaques', 'weekly', [3], 10, 'moderate', '', null],
+    ['Cuisine', 'Laver le sol de la cuisine', 'weekly', [6], 15, 'moderate', '', 'Sols'],
+    ['Cuisine', 'Remplacer éponges et torchons', 'weekly', [7], 5, 'light', 'Torchons au sale, éponges neuves sous l’évier.', 'Linge'],
+    ['Salle de bain', 'Nettoyer la douche', 'weekly', [6], 20, 'heavy', 'Anticalcaire, rincer, raclette.', null],
+    ['Salle de bain', 'Lavabo et miroir', 'weekly', [3], 10, 'light', '', null],
+    ['Salle de bain', 'Sol de la salle de bain', 'weekly', [6], 10, 'moderate', '', 'Sols'],
+    ['Salle de bain', 'Laver serviettes et tapis de bain', 'weekly', [7], 15, 'moderate', 'Lavage à 60 °C.', 'Linge'],
+    ['WC', 'Nettoyer la cuvette et désinfecter', 'weekly', [2, 6], 10, 'heavy', 'Gants, gel WC, désinfectant surfaces.', null],
+    ['WC', 'Laver le sol des WC', 'weekly', [6], 5, 'moderate', '', 'Sols'],
+    ['Salon', 'Ranger et dépoussiérer', 'weekly', [5], 15, 'light', '', null],
+    ['Salon', 'Aspirer le salon', 'weekly', [6], 20, 'moderate', 'Passer l’aspirateur avant de laver les sols.', 'Sols'],
+    ['Salon', 'Laver le sol du salon', 'weekly', [6], 15, 'moderate', '', 'Sols'],
+    ['Entrée', 'Ranger les chaussures et nettoyer le sol', 'weekly', [6], 10, 'light', '', 'Sols'],
+    ['Balcon / terrasse', 'Balayer le balcon', 'weekly', [7], 15, 'moderate', '', null],
   ];
   const monthly: [string, string, number, number, 'light' | 'moderate' | 'heavy', string][] = [
     ['Salon', 'Laver les vitres', 1, 45, 'heavy', 'Produit vitres et chiffon microfibre, sans oublier les encadrements.'],
@@ -394,14 +398,14 @@ function seed(): DB {
   ];
   for (const [zone, name, mw, duration_min, effort, instructions] of monthly) {
     d.task_templates.push({
-      id: uuid(), household_id: h, zone_id: zid(zone), name, description: '', instructions, frequency: 'monthly', weekdays: [6], month_week: mw, once_date: null,
+      id: uuid(), household_id: h, zone_id: zid(zone), name, description: '', instructions, frequency: 'monthly', weekdays: [6], month_week: mw, group_name: null, once_date: null,
       window_days: 2, duration_min, effort, preferred_user: null, fixed_user: null, start_date: addDays(t, -60), end_date: null,
       active: true, archived: false, created_by: A, created_at: now(), version: 1,
     });
   }
-  for (const [zone, name, frequency, weekdays, duration_min, effort, instructions] of tpls) {
+  for (const [zone, name, frequency, weekdays, duration_min, effort, instructions, group_name] of tpls) {
     d.task_templates.push({
-      id: uuid(), household_id: h, zone_id: zid(zone), name, description: '', instructions: instructions ?? '', frequency, weekdays, month_week: null, once_date: null,
+      id: uuid(), household_id: h, zone_id: zid(zone), name, description: '', instructions, frequency, weekdays, month_week: null, group_name, once_date: null,
       window_days: 0, duration_min, effort, preferred_user: null, fixed_user: null, start_date: addDays(t, -28), end_date: null,
       active: true, archived: false, created_by: A, created_at: now(), version: 1,
     });

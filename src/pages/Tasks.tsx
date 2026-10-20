@@ -442,6 +442,7 @@ function Catalogue() {
                   <div className="meta">
                     <span>{describeFrequency(tp)}</span><span>{fmtMinutes(tp.duration_min)}</span><span>effort {EFFORT_LABEL[tp.effort].toLowerCase()}</span>
                     <span>{weightOf(tp.duration_min, tp.effort, c)} pts</span>
+                    {tp.group_name && <span className="badge accent">groupe {tp.group_name}</span>}
                     {tp.fixed_user && <span>toujours {name(tp.fixed_user)}</span>}
                     {tp.preferred_user && !tp.fixed_user && <span>préférence {name(tp.preferred_user)}</span>}
                     {tp.end_date && <span>jusqu’au {fmtDate(tp.end_date)}</span>}

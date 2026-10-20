@@ -40,6 +40,8 @@ export interface HouseholdSettings {
   enable_in_progress?: boolean;
   avoid_repeats?: boolean;
   window_weeks?: number;
+  /** regrouper les tâches d'une même pièce le même jour (par défaut : oui) */
+  group_by_zone?: boolean;
 }
 
 export interface Household {
@@ -91,6 +93,8 @@ export interface TaskTemplate {
   weekdays: number[]; // 1 = lundi … 7 = dimanche
   /** mensuelle : semaine du mois (1 à 4, -1 = dernière) ; le jour vient de weekdays[0] */
   month_week: number | null;
+  /** groupe nommé : tâches faites le même jour par la même personne (ex. « Sols ») */
+  group_name: string | null;
   once_date: ISODate | null;
   window_days: number;
   duration_min: number;

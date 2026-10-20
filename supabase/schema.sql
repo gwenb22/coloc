@@ -172,6 +172,7 @@ create table public.task_templates (
   frequency text not null check (frequency in ('daily', 'weekly', 'monthly', 'once')),
   weekdays int[] not null default '{}', -- 1 = lundi … 7 = dimanche
   month_week int check (month_week is null or month_week in (-1, 1, 2, 3, 4)), -- mensuelle : n-ième jour du mois
+  group_name text check (group_name is null or length(group_name) between 1 and 40), -- même jour, même personne
   once_date date,
   window_days int not null default 0 check (window_days between 0 and 6), -- plage de réalisation
   duration_min int not null check (duration_min between 1 and 600),
@@ -772,26 +773,30 @@ begin
 
   -- Tâches d'exemple (modifiables, archivables)
   for z in select id, name from public.zones where household_id = hid loop
-    insert into public.task_templates (household_id, zone_id, name, frequency, weekdays, month_week, duration_min, effort, created_by)
-    select hid, z.id, t.name, t.freq, t.days, t.mw, t.dur, t.eff, uid
+    insert into public.task_templates (household_id, zone_id, name, frequency, weekdays, month_week, duration_min, effort, group_name, created_by)
+    select hid, z.id, t.name, t.freq, t.days, t.mw, t.dur, t.eff, t.grp, uid
     from (values
-      ('Cuisine', 'Vaisselle et plans de travail', 'daily', '{}'::int[], null::int, 15, 'light'),
-      ('Cuisine', 'Sortir les poubelles', 'weekly', '{1,4}'::int[], null::int, 5, 'light'),
-      ('Cuisine', 'Nettoyer les plaques', 'weekly', '{3}'::int[], null::int, 10, 'moderate'),
-      ('Cuisine', 'Laver le sol de la cuisine', 'weekly', '{6}'::int[], null::int, 15, 'moderate'),
-      ('Salle de bain', 'Nettoyer la douche', 'weekly', '{6}'::int[], null::int, 20, 'heavy'),
-      ('Salle de bain', 'Lavabo et miroir', 'weekly', '{3}'::int[], null::int, 10, 'light'),
-      ('Salle de bain', 'Sol de la salle de bain', 'weekly', '{6}'::int[], null::int, 10, 'moderate'),
-      ('WC', 'Nettoyer la cuvette et désinfecter', 'weekly', '{2,6}'::int[], null::int, 10, 'heavy'),
-      ('Salon', 'Ranger et dépoussiérer', 'weekly', '{5}'::int[], null::int, 15, 'light'),
-      ('Salon', 'Aspirer le salon', 'weekly', '{6}'::int[], null::int, 20, 'moderate'),
-      ('Entrée', 'Ranger les chaussures et nettoyer le sol', 'weekly', '{7}'::int[], null::int, 10, 'light'),
-      ('Balcon / terrasse', 'Balayer le balcon', 'weekly', '{7}'::int[], null::int, 15, 'moderate'),
-      ('Salon', 'Laver les vitres', 'monthly', '{6}'::int[], 1, 45, 'heavy'),
-      ('Cuisine', 'Nettoyer le four', 'monthly', '{6}'::int[], 2, 30, 'heavy'),
-      ('Cuisine', 'Nettoyer le micro-ondes', 'monthly', '{6}'::int[], 3, 10, 'moderate'),
-      ('Cuisine', 'Nettoyer le frigo', 'monthly', '{6}'::int[], 4, 25, 'heavy')
-    ) as t(zone, name, freq, days, mw, dur, eff)
+      ('Cuisine', 'Vaisselle et plans de travail', 'daily', '{}'::int[], null::int, 15, 'light', null::text),
+      ('Cuisine', 'Sortir les poubelles', 'weekly', '{1,4}'::int[], null::int, 5, 'light', null::text),
+      ('Cuisine', 'Nettoyer les plaques', 'weekly', '{3}'::int[], null::int, 10, 'moderate', null::text),
+      ('Cuisine', 'Laver le sol de la cuisine', 'weekly', '{6}'::int[], null::int, 15, 'moderate', 'Sols'),
+      ('Cuisine', 'Remplacer éponges et torchons', 'weekly', '{7}'::int[], null::int, 5, 'light', 'Linge'),
+      ('Salle de bain', 'Nettoyer la douche', 'weekly', '{6}'::int[], null::int, 20, 'heavy', null::text),
+      ('Salle de bain', 'Lavabo et miroir', 'weekly', '{3}'::int[], null::int, 10, 'light', null::text),
+      ('Salle de bain', 'Sol de la salle de bain', 'weekly', '{6}'::int[], null::int, 10, 'moderate', 'Sols'),
+      ('Salle de bain', 'Laver serviettes et tapis de bain', 'weekly', '{7}'::int[], null::int, 15, 'moderate', 'Linge'),
+      ('WC', 'Nettoyer la cuvette et désinfecter', 'weekly', '{2,6}'::int[], null::int, 10, 'heavy', null::text),
+      ('WC', 'Laver le sol des WC', 'weekly', '{6}'::int[], null::int, 5, 'moderate', 'Sols'),
+      ('Salon', 'Ranger et dépoussiérer', 'weekly', '{5}'::int[], null::int, 15, 'light', null::text),
+      ('Salon', 'Aspirer le salon', 'weekly', '{6}'::int[], null::int, 20, 'moderate', 'Sols'),
+      ('Salon', 'Laver le sol du salon', 'weekly', '{6}'::int[], null::int, 15, 'moderate', 'Sols'),
+      ('Entrée', 'Ranger les chaussures et nettoyer le sol', 'weekly', '{6}'::int[], null::int, 10, 'light', 'Sols'),
+      ('Balcon / terrasse', 'Balayer le balcon', 'weekly', '{7}'::int[], null::int, 15, 'moderate', null::text),
+      ('Salon', 'Laver les vitres', 'monthly', '{6}'::int[], 1, 45, 'heavy', null::text),
+      ('Cuisine', 'Nettoyer le four', 'monthly', '{6}'::int[], 2, 30, 'heavy', null::text),
+      ('Cuisine', 'Nettoyer le micro-ondes', 'monthly', '{6}'::int[], 3, 10, 'moderate', null::text),
+      ('Cuisine', 'Nettoyer le frigo', 'monthly', '{6}'::int[], 4, 25, 'heavy', null::text)
+    ) as t(zone, name, freq, days, mw, dur, eff, grp)
     where t.zone = z.name;
   end loop;
 

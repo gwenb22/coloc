@@ -4,7 +4,7 @@ import { describeFrequency, templateDates } from './recurrence';
 import { dateInMonth, dueDates, nextDate, stableUuid } from './recurring';
 
 const tpl = (p: Partial<TaskTemplate>): TaskTemplate => ({
-  id: 't', household_id: 'h', zone_id: null, name: 'x', description: '', instructions: '', frequency: 'monthly', weekdays: [6], month_week: 1,
+  id: 't', household_id: 'h', zone_id: null, name: 'x', description: '', instructions: '', frequency: 'monthly', weekdays: [6], month_week: 1, group_name: null,
   once_date: null, window_days: 0, duration_min: 10, effort: 'light', preferred_user: null, fixed_user: null,
   start_date: '2026-01-01', end_date: null, active: true, archived: false, created_by: null, created_at: '', version: 1, ...p,
 });

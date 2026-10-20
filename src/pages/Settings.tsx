@@ -353,6 +353,7 @@ function PlanningCard() {
           </Field>
         </div>
         <label className="toggle"><input type="checkbox" checked={s.avoid_repeats !== false} onChange={(e) => upd({ avoid_repeats: e.target.checked })} />Éviter qu’une même tâche revienne toujours à la même personne</label>
+        <label className="toggle"><input type="checkbox" checked={s.group_by_zone !== false} onChange={(e) => upd({ group_by_zone: e.target.checked })} />Regrouper les tâches d’une même pièce le même jour (une seule personne)</label>
         <label className="toggle"><input type="checkbox" checked={!!s.enable_in_progress} onChange={(e) => upd({ enable_in_progress: e.target.checked })} />Activer le statut « En cours »</label>
       </div>
     </div>

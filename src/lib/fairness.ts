@@ -118,53 +118,90 @@ export function planAssignments(input: PlanInput): PlanResult {
     }
   }
 
-  // Les tâches à attribution fixe d'abord, puis de la plus lourde à la plus légère
-  todo.sort((a, b) => Number(!!b.tpl.fixed_user) - Number(!!a.tpl.fixed_user) || b.slot.weight - a.slot.weight || a.slot.scheduled_date.localeCompare(b.slot.scheduled_date));
+  // Regroupement : même groupe nommé + même jour, sinon même pièce + même jour → un seul bloc pour une seule personne
+  const groupByZone = settings.group_by_zone !== false;
+  const keyOf = (tpl: TaskTemplate, date: ISODate) =>
+    tpl.group_name?.trim() ? `g:${tpl.group_name.trim().toLowerCase()}|${date}` : groupByZone && tpl.zone_id ? `z:${tpl.zone_id}|${date}` : `t:${tpl.id}|${date}`;
+  // Si une tâche du bloc est déjà attribuée (verrouillée, validée, terminée), le reste du bloc suit la même personne
+  const owner = new Map<string, UUID>();
+  for (const s of slots) {
+    const tpl = templates.find((t) => t.id === s.template_id);
+    if (s.kept && s.assigned_to && tpl && s.reason !== 'Annulée') {
+      const k = keyOf(tpl, s.scheduled_date);
+      if (!owner.has(k) || s.existing?.locked) owner.set(k, s.assigned_to);
+    }
+  }
+  const bundles = new Map<string, { key: string; date: ISODate; items: { slot: PlannedSlot; tpl: TaskTemplate }[]; weight: number }>();
+  for (const it of todo) {
+    const k = keyOf(it.tpl, it.slot.scheduled_date);
+    const bnd = bundles.get(k) ?? { key: k, date: it.slot.scheduled_date, items: [], weight: 0 };
+    bnd.items.push(it);
+    bnd.weight += it.slot.weight;
+    bundles.set(k, bnd);
+  }
+  const groupLabel = (k: string, n: number) => (n < 2 && !k.startsWith('g:') ? '' : k.startsWith('g:') ? `groupe « ${k.slice(2, k.indexOf('|'))} » · ` : 'même pièce, même jour · ');
 
-  for (const { slot, tpl } of todo) {
-    const date = slot.scheduled_date;
+  // Blocs à attribution imposée d'abord, puis du plus lourd au plus léger
+  const ordered = [...bundles.values()].sort((x, y) =>
+    Number(y.items.some((i) => i.tpl.fixed_user) || owner.has(y.key)) - Number(x.items.some((i) => i.tpl.fixed_user) || owner.has(x.key)) || y.weight - x.weight || x.date.localeCompare(y.date));
+
+  for (const bnd of ordered) {
+    const date = bnd.date;
     let candidates = members.filter((m) => !isUnavailable(unavailabilities, m, date));
     let reason = '';
     if (candidates.length === 0) {
       candidates = [...members];
       reason = 'Personne n’est disponible : ';
     }
-    if (tpl.fixed_user && candidates.includes(tpl.fixed_user)) {
-      slot.assigned_to = tpl.fixed_user;
-      slot.reason = 'Attribution fixe';
+    const prefix = groupLabel(bnd.key, bnd.items.length + (owner.has(bnd.key) ? 1 : 0));
+    const fixed = bnd.items.find((i) => i.tpl.fixed_user && candidates.includes(i.tpl.fixed_user))?.tpl.fixed_user;
+    const imposed = owner.get(bnd.key);
+    let chosen: UUID | null = null;
+    let why = '';
+    if (imposed && candidates.includes(imposed)) {
+      chosen = imposed;
+      why = 'suit la tâche déjà attribuée du bloc';
+    } else if (fixed) {
+      chosen = fixed;
+      why = 'attribution fixe';
     } else {
-      const history = (lastBy.get(tpl.id) ?? []).filter((h) => h.date < date).sort((a, b) => b.date.localeCompare(a.date));
-      let best: UUID | null = null;
       let bestScore = Infinity;
-      let bestWhy = '';
       for (const m of candidates) {
-        let score = load[m] + slot.weight;
-        let why = 'charge la plus faible';
+        let score = load[m] + bnd.weight;
+        let w = 'charge la plus faible';
         if (avoidRepeats) {
-          let streak = 0;
-          for (const h of history) {
-            if (h.user === m) streak++;
-            else break;
+          // Pénalité selon la plus longue série récente de la même personne sur les tâches du bloc
+          let worst = 0;
+          for (const { tpl } of bnd.items) {
+            const history = (lastBy.get(tpl.id) ?? []).filter((h) => h.date < date).sort((x, y) => y.date.localeCompare(x.date));
+            let streak = 0;
+            for (const h of history) {
+              if (h.user === m) streak++;
+              else break;
+            }
+            worst = Math.max(worst, streak);
           }
-          if (streak > 0) score += 0.25 * slot.weight * Math.min(streak, 3);
+          if (worst > 0) score += 0.25 * bnd.weight * Math.min(worst, 3);
         }
-        if (tpl.preferred_user === m) {
-          score -= 0.25 * slot.weight;
-          why = 'préférence et charge';
+        const prefW = bnd.items.filter((i) => i.tpl.preferred_user === m).reduce((x, i) => x + i.slot.weight, 0);
+        if (prefW > 0) {
+          score -= 0.25 * prefW;
+          w = 'préférence et charge';
         }
-        if (score < bestScore - 1e-9 || (Math.abs(score - bestScore) < 1e-9 && best !== null && load[m] < load[best])) {
-          best = m;
+        if (score < bestScore - 1e-9 || (Math.abs(score - bestScore) < 1e-9 && chosen !== null && load[m] < load[chosen])) {
+          chosen = m;
           bestScore = score;
-          bestWhy = why;
+          why = w;
         }
       }
-      slot.assigned_to = best;
-      slot.reason = reason + (candidates.length < members.length ? 'seule personne disponible' : bestWhy);
+      if (candidates.length < members.length) why = 'seule personne disponible';
     }
-    if (slot.assigned_to) {
-      load[slot.assigned_to] += slot.weight;
-      remember(tpl.id, date, slot.assigned_to);
+    for (const { slot, tpl } of bnd.items) {
+      slot.assigned_to = chosen;
+      slot.reason = reason + prefix + why;
+      if (chosen) remember(tpl.id, date, chosen);
     }
+    if (chosen) load[chosen] += bnd.weight;
   }
 
   slots.sort((a, b) => a.scheduled_date.localeCompare(b.scheduled_date));
