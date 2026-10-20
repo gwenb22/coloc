@@ -5,7 +5,6 @@
 -- seules les personnes membres d'une colocation voient ses données.
 -- =====================================================================
 
-create extension if not exists pgcrypto;
 
 -- ---------------------------------------------------------------------
 -- Profils (créés automatiquement à l'inscription)
@@ -704,8 +703,10 @@ create policy notifications_update on public.notifications for update using (use
 -- ---------------------------------------------------------------------
 -- Fonctions appelées par l'application (opérations transactionnelles)
 -- ---------------------------------------------------------------------
-create or replace function public.random_code() returns text language sql volatile as $$
-  select upper(substr(translate(encode(gen_random_bytes(9), 'base64'), '+/=0O1Il', 'XYZ23456'), 1, 8));
+-- Code d'invitation à 8 caractères (sans dépendre de pgcrypto, installé dans le schéma « extensions » sur Supabase)
+create or replace function public.random_code() returns text language sql volatile set search_path = pg_catalog as $$
+  select string_agg(substr('ABCDEFGHJKLMNPQRSTUVWXYZ23456789', 1 + floor(random() * 32)::int, 1), '')
+  from generate_series(1, 8);
 $$;
 
 create or replace function public.create_household(p_name text) returns uuid

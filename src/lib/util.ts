@@ -35,5 +35,5 @@ export function errorMessage(e: unknown): string {
   if (/row-level security|permission denied/i.test(msg)) return 'Action non autorisée.';
   if (/duplicate key/i.test(msg)) return 'Cet élément existe déjà (envoi en double évité).';
   if (code === 'P0001' || code === 'P0002' || /^[A-ZÀ-Ü]/.test(msg)) return msg;
-  return 'Une erreur est survenue. Réessayez.';
+  return code ? `Une erreur est survenue (code ${code}). Réessayez ou signalez ce code.` : 'Une erreur est survenue. Réessayez.';
 }
