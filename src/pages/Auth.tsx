@@ -4,7 +4,7 @@ import { backend, enterDemo, isConfigured } from '../backend';
 import { DEMO_USERS } from '../backend/demo';
 import { resetDemo } from '../backend/demo';
 import { useStore } from '../store';
-import { Field, Icon, Tabs } from '../components/ui';
+import { Field, Tabs } from '../components/ui';
 import { errorMessage } from '../lib/util';
 
 type Mode = 'login' | 'signup' | 'forgot';
@@ -30,7 +30,7 @@ function Shell({ children, subtitle }: { children: React.ReactNode; subtitle: st
     <div className="auth-wrap">
       <div className="card auth-card">
         <div className="card-pad">
-          <div className="auth-logo"><Icon name="home" size={26} /></div>
+          <img className="auth-logo" src="./logo.jpg" alt="Coloc" />
           <div>
             <h1>Coloc</h1>
             <p className="muted">{subtitle}</p>

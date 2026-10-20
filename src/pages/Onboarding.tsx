@@ -87,7 +87,7 @@ export default function Onboarding({ inviteFromUrl }: { inviteFromUrl?: string }
     <div className="auth-wrap">
       <div className="card auth-card">
         <div className="card-pad">
-          <div className="auth-logo"><Icon name="home" size={26} /></div>
+          <img className="auth-logo" src="./logo.jpg" alt="Coloc" />
           <div>
             <h1>Bienvenue</h1>
             <p className="muted">Connecté·e en tant que {user?.email}. Créez votre colocation ou rejoignez celle de votre colocataire.</p>

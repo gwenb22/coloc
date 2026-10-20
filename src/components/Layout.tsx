@@ -40,7 +40,7 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="app">
       <aside className="sidebar" aria-label="Navigation principale">
         <div className="brand">
-          <div className="brand-logo"><Icon name="home" /></div>
+          <img className="brand-logo" src="./logo.jpg" alt="" />
           <div className="ellipsis">Coloc<small className="ellipsis">{data.household.name}</small></div>
         </div>
         {NAV.map((n) => (
