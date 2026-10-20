@@ -6,13 +6,14 @@ import type { Budget, Expense, UUID } from '../types';
 import { Empty, Field, Icon, Modal, Person, Progress, Seg, Tabs } from '../components/ui';
 import { useModals } from '../components/Modals';
 import { Beige, Columns, MRow, SectionTitle } from '../components/mobile';
+import { describeSplit, nextDate } from '../lib/recurring';
 import { fmtDate, MONTHS, today } from '../lib/dates';
 import { centsToInput, computeBalances, formatMoney, parseCents, settlement } from '../lib/money';
 import { budgetUsage, findBudget, inPeriod, isShared } from '../lib/budget';
 import { centsCSV, download, toCSV } from '../lib/csv';
 import { cx } from '../lib/util';
 
-type Tab = 'apercu' | 'depenses' | 'soldes' | 'budgets' | 'bilan';
+type Tab = 'apercu' | 'depenses' | 'recurrentes' | 'soldes' | 'budgets' | 'bilan';
 
 export default function BudgetPage() {
   const [params, setParams] = useSearchParams();
@@ -21,11 +22,12 @@ export default function BudgetPage() {
   return (
     <div className="mpage">
       <Tabs value={tab} onChange={go} tabs={[
-        { value: 'apercu', label: 'Aperçu' }, { value: 'depenses', label: 'Dépenses' }, { value: 'soldes', label: 'Soldes' },
+        { value: 'apercu', label: 'Aperçu' }, { value: 'depenses', label: 'Dépenses' }, { value: 'recurrentes', label: 'Récurrentes' }, { value: 'soldes', label: 'Soldes' },
         { value: 'budgets', label: 'Budgets' }, { value: 'bilan', label: 'Bilan et export' },
       ]} />
       {tab === 'apercu' && <Overview go={go} />}
       {tab === 'depenses' && <Expenses />}
+      {tab === 'recurrentes' && <Recurring />}
       {tab === 'soldes' && <Balances />}
       {tab === 'budgets' && <Budgets />}
       {tab === 'bilan' && <Report />}
@@ -85,8 +87,50 @@ function Overview({ go }: { go: (t: Tab) => void }) {
           ))}
         </Beige>
         <button className="btn btn-primary btn-big" onClick={() => openExpense(null)}><Icon name="plus" />Ajouter une dépense</button>
+        <RecurringList compact onMore={() => go('recurrentes')} />
       </div>
     </div>
+  );
+}
+
+// =====================================================================
+// Dépenses récurrentes
+// =====================================================================
+function Recurring() {
+  const { openRecurring } = useModals();
+  return (
+    <div className="mgrid">
+      <div className="mcol">
+        <RecurringList />
+        <button className="btn btn-primary btn-big" onClick={() => openRecurring(null)}><Icon name="plus" />Nouvelle dépense récurrente</button>
+      </div>
+      <div className="mcol">
+        <div className="info-box small">Les dépenses récurrentes (loyer, abonnements, électricité…) sont créées automatiquement chaque mois, avec le même partage, dès que l’un de vous ouvre l’application. Les mois manqués sont rattrapés, sans jamais créer de doublon. Vous pouvez aussi cocher « Répéter tous les mois » en ajoutant une dépense.</div>
+      </div>
+    </div>
+  );
+}
+
+function RecurringList({ compact, onMore }: { compact?: boolean; onMore?: () => void }) {
+  const { data, name, category } = useData();
+  const { openRecurring } = useModals();
+  const money = useMoney();
+  const t = today();
+  const list = [...(data.recurring_expenses ?? [])].sort((a, b) => Number(b.active) - Number(a.active) || a.day_of_month - b.day_of_month);
+  const monthly = list.filter((r) => r.active && (!r.end_date || r.end_date >= t)).reduce((a, r) => a + r.amount_cents, 0);
+  return (
+    <Beige title={compact ? 'Dépenses récurrentes' : `${list.length} dépense${list.length > 1 ? 's' : ''} récurrente${list.length > 1 ? 's' : ''} · ${money(monthly)} / mois`}
+      action={compact ? <button className="pill sm" onClick={onMore}>Gérer</button> : undefined}>
+      {list.length === 0 && <div className="empty-line">Aucune pour l’instant (loyer, internet, électricité…).</div>}
+      {(compact ? list.filter((r) => r.active).slice(0, 4) : list).map((r) => {
+        const next = nextDate(r, t);
+        return (
+          <MRow key={r.id} done={!r.active}
+            over={<>le {r.day_of_month} · {name(r.paid_by)} paie · {describeSplit(r.split_mode, r.split_inputs, name)}{!compact && category(r.category_id) ? ` · ${category(r.category_id)!.name}` : ''}{r.active ? (next ? ` · prochaine le ${fmtDate(next)}` : ' · terminée') : ' · en pause'}{!r.auto_validate ? ' · à valider' : ''}</>}
+            title={`🔁 ${r.title}`} onClick={() => openRecurring(r)} right={<span className="val">{money(r.amount_cents)}</span>} />
+        );
+      })}
+    </Beige>
   );
 }
 
@@ -163,7 +207,7 @@ function Expenses() {
               <tr key={e.id} className={cx('clickable', e.status === 'cancelled' && 'cancelled')} onClick={() => openExpense(e)}>
                 <td className="nowrap">{fmtDate(e.date)}</td>
                 <td>
-                  <div className="strong">{e.title} {e.status === 'draft' && <span className="badge warning">provisoire</span>}{e.status === 'cancelled' && <span className="badge">annulée</span>}</div>
+                  <div className="strong">{e.recurring_id ? '🔁 ' : ''}{e.title} {e.status === 'draft' && <span className="badge warning">provisoire</span>}{e.status === 'cancelled' && <span className="badge">annulée</span>}</div>
                   <div className="xs muted">{category(e.category_id)?.name ?? '—'} · {isShared(e, data.expense_shares) ? (e.split_mode === 'equal' ? 'partagée 50/50' : e.split_mode === 'percent' ? 'partagée en %' : 'montants fixes') : `pour ${name(data.expense_shares.find((s) => s.expense_id === e.id && s.share_cents > 0)?.user_id)}`}</div>
                 </td>
                 <td><Person id={e.paid_by} you={false} /></td>

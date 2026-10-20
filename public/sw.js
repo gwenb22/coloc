@@ -1,6 +1,6 @@
 // Service worker Coloc : met en cache uniquement l'interface (fichiers statiques).
 // Aucune donnée privée (Supabase) n'est mise en cache.
-const CACHE = 'coloc-shell-v2';
+const CACHE = 'coloc-shell-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE).then((c) => c.addAll(['./', './index.html', './manifest.webmanifest', './icon-192.png'])).then(() => self.skipWaiting()));

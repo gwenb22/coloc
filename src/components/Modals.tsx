@@ -1,12 +1,13 @@
 import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
 import { backend } from '../backend';
 import { useData } from '../store';
-import type { Effort, Expense, Frequency, Occurrence, Reimbursement, ShoppingItem, SplitMode, TaskTemplate, UUID } from '../types';
+import type { Effort, Expense, Frequency, Occurrence, RecurringExpense, Reimbursement, ShoppingItem, SplitMode, TaskTemplate, UUID } from '../types';
+import { RecurringModal } from './RecurringModal';
 import { Field, Icon, Modal, Person, PersonSelect, Seg, StatusBadge, useConfirm } from './ui';
-import { addDays, fmtDate, fmtDateLong, fmtDateTime, today, WEEKDAYS_SHORT } from '../lib/dates';
+import { addDays, fmtDate, fmtDateLong, fmtDateTime, today, WEEKDAYS_LONG, WEEKDAYS_SHORT } from '../lib/dates';
 import { coefs, EFFORT_LABEL, fairnessStats, isOpen, makeIsLate, occurrenceFields, weightOf } from '../lib/fairness';
 import { centsToInput, computeShares, formatMoney, parseCents, SplitError } from '../lib/money';
-import { templateAppliesOn, describeFrequency } from '../lib/recurrence';
+import { templateAppliesOn, describeFrequency, MONTH_WEEK_LABEL } from '../lib/recurrence';
 import { cx, fmtMinutes, uuid } from '../lib/util';
 
 interface ExpensePrefill {
@@ -23,6 +24,7 @@ interface Modals {
   openExpense: (e: Expense | null, prefill?: ExpensePrefill) => void;
   openReimbursement: (prefill?: Partial<Reimbursement>, existing?: Reimbursement) => void;
   openShopping: (item: ShoppingItem | null, defaults?: Partial<ShoppingItem>) => void;
+  openRecurring: (rule: RecurringExpense | null) => void;
 }
 
 const Ctx = createContext<Modals>(null!);
@@ -34,6 +36,7 @@ type State =
   | { kind: 'exp'; e: Expense | null; prefill?: ExpensePrefill }
   | { kind: 'reimb'; prefill?: Partial<Reimbursement>; existing?: Reimbursement }
   | { kind: 'shop'; item: ShoppingItem | null; defaults?: Partial<ShoppingItem> }
+  | { kind: 'recur'; rule: RecurringExpense | null }
   | null;
 
 export function ModalsProvider({ children }: { children: ReactNode }) {
@@ -44,6 +47,7 @@ export function ModalsProvider({ children }: { children: ReactNode }) {
     openExpense: (e, prefill) => setState({ kind: 'exp', e, prefill }),
     openReimbursement: (prefill, existing) => setState({ kind: 'reimb', prefill, existing }),
     openShopping: (item, defaults) => setState({ kind: 'shop', item, defaults }),
+    openRecurring: (rule) => setState({ kind: 'recur', rule }),
   }), []);
   const close = () => setState(null);
   return (
@@ -54,6 +58,7 @@ export function ModalsProvider({ children }: { children: ReactNode }) {
       {state?.kind === 'exp' && <ExpenseModal expense={state.e} prefill={state.prefill} onClose={close} />}
       {state?.kind === 'reimb' && <ReimbursementModal prefill={state.prefill} existing={state.existing} onClose={close} />}
       {state?.kind === 'shop' && <ShoppingModal item={state.item} defaults={state.defaults} onClose={close} />}
+      {state?.kind === 'recur' && <RecurringModal rule={state.rule} onClose={close} />}
     </Ctx.Provider>
   );
 }
@@ -286,7 +291,9 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
     if (f.frequency === 'once' && !f.once_date) return setErr('Choisissez une date.');
     if (f.end_date && f.start_date && f.end_date < f.start_date) return setErr('La date de fin précède la date de début.');
     const payload: Partial<TaskTemplate> = {
-      name: f.name.trim(), zone_id: f.zone_id, frequency: f.frequency, weekdays: f.frequency === 'weekly' ? [...(f.weekdays ?? [])].sort() : [],
+      name: f.name.trim(), zone_id: f.zone_id, frequency: f.frequency, weekdays: f.frequency === 'weekly' ? [...(f.weekdays ?? [])].sort() : f.frequency === 'monthly' ? [f.weekdays?.[0] ?? 6] : [],
+      // month_week n'est envoyé que si utile (compatibilité avec une base sans le correctif n°2)
+      ...(f.frequency === 'monthly' || (tpl && tpl.month_week != null) ? { month_week: f.frequency === 'monthly' ? f.month_week ?? 1 : null } : {}),
       once_date: f.frequency === 'once' ? f.once_date : null, duration_min: Number(f.duration_min), effort: f.effort, preferred_user: f.preferred_user || null,
       fixed_user: f.fixed_user || null, start_date: f.frequency === 'once' ? f.once_date! : f.start_date, end_date: f.frequency === 'once' ? null : f.end_date || null,
       description: f.description ?? '', instructions: f.instructions ?? '', window_days: Number(f.window_days) || 0, active: f.active ?? true,
@@ -352,8 +359,21 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
             </select>
           </Field>
           <Field label="Fréquence">
-            <Seg<Frequency> value={f.frequency as Frequency} onChange={(v) => set('frequency', v)} options={[{ value: 'daily', label: 'Quotidienne' }, { value: 'weekly', label: 'Hebdo' }, { value: 'once', label: 'Ponctuelle' }]} />
+            <Seg<Frequency> value={f.frequency as Frequency} onChange={(v) => set('frequency', v)} options={[{ value: 'daily', label: 'Quotidienne' }, { value: 'weekly', label: 'Hebdo' }, { value: 'monthly', label: 'Mensuelle' }, { value: 'once', label: 'Ponctuelle' }]} />
           </Field>
+          {f.frequency === 'monthly' && (
+            <Field label="Chaque mois" className="full" hint="Ex. : le 1er samedi du mois. « Dernier » = le dernier de ce jour dans le mois.">
+              <div className="row">
+                <select className="select" value={f.month_week ?? 1} onChange={(e) => set('month_week', Number(e.target.value))} aria-label="Semaine du mois">
+                  {[1, 2, 3, 4, -1].map((n) => <option key={n} value={n}>{MONTH_WEEK_LABEL[String(n)]}</option>)}
+                </select>
+                <select className="select" value={f.weekdays?.[0] ?? 6} onChange={(e) => set('weekdays', [Number(e.target.value)])} aria-label="Jour">
+                  {WEEKDAYS_LONG.map((d, i) => <option key={d} value={i + 1}>{d}</option>)}
+                </select>
+                <span className="nowrap muted">du mois</span>
+              </div>
+            </Field>
+          )}
           {f.frequency === 'weekly' && (
             <Field label="Jours" className="full">
               <div className="days">
@@ -447,6 +467,7 @@ function ExpenseModal({ expense, prefill, onClose }: { expense: Expense | null; 
   const [single, setSingle] = useState<UUID>(() => (expense?.split_mode === 'single' ? existingShares[0]?.user_id : null) ?? memberIds.find((m) => m !== meId) ?? meId);
   const [note, setNote] = useState(expense?.note ?? '');
   const [draft, setDraft] = useState(expense?.status === 'draft');
+  const [repeat, setRepeat] = useState(false);
   const [maint, setMaint] = useState<UUID | null>(expense?.maintenance_id ?? prefill?.maintenance_id ?? null);
   const [err, setErr] = useState('');
 
@@ -458,9 +479,9 @@ function ExpenseModal({ expense, prefill, onClose }: { expense: Expense | null; 
         : mode === 'percent' ? memberIds.map((m) => ({ user_id: m, value: Number(pct[m]?.replace(',', '.') || 0) }))
         : mode === 'fixed' ? memberIds.map((m) => ({ user_id: m, value: parseCents(fixed[m] || '0') ?? -1 }))
         : memberIds.map((m) => ({ user_id: m, included: included[m] }));
-      return { error: '', shares: computeShares(cents, mode, inputs) };
+      return { error: '', shares: computeShares(cents, mode, inputs), inputs };
     } catch (e) {
-      return { error: e instanceof SplitError ? e.message : 'Répartition invalide.', shares: [] };
+      return { error: e instanceof SplitError ? e.message : 'Répartition invalide.', shares: [], inputs: [] };
     }
   }, [cents, amount, mode, single, pct, fixed, included, memberIds]);
 
@@ -472,11 +493,23 @@ function ExpenseModal({ expense, prefill, onClose }: { expense: Expense | null; 
     if (!title.trim()) return setErr('Indiquez un titre.');
     if (!cents) return setErr('Indiquez un montant valide (ex. : 12,50).');
     if (preview.error) return setErr(preview.error);
-    const r = await run(() => backend.rpc('save_expense', {
-      p_id: expense?.id ?? null, p_client_key: clientKey, p_version: expense?.version ?? null, p_title: title.trim(), p_amount_cents: cents, p_date: date,
-      p_category_id: cat, p_paid_by: paidBy, p_split_mode: mode, p_status: draft ? 'draft' : 'validated', p_note: note.trim(), p_maintenance_id: maint,
-      p_shares: preview.shares.filter((s) => s.share_cents > 0 || mode !== 'equal'),
-    }), { success: expense ? 'Dépense modifiée' : 'Dépense ajoutée', tables: ['expenses', 'expense_shares'], key: 'exp-' + clientKey });
+    const r = await run(async () => {
+      // « Répéter tous les mois » : on crée la règle, puis la dépense de ce mois rattachée à la règle
+      let recurringId = expense?.recurring_id ?? null;
+      if (!expense && repeat) {
+        const [rule] = await backend.insert<RecurringExpense>('recurring_expenses', {
+          household_id: data.household.id, title: title.trim(), amount_cents: cents, category_id: cat, paid_by: paidBy, split_mode: mode,
+          split_inputs: preview.inputs ?? [], day_of_month: Number(date.slice(8)), start_date: date, last_generated: date,
+          auto_validate: !draft, active: true, note: note.trim(), created_by: meId,
+        });
+        recurringId = rule.id;
+      }
+      return backend.rpc('save_expense', {
+        p_id: expense?.id ?? null, p_client_key: clientKey, p_version: expense?.version ?? null, p_title: title.trim(), p_amount_cents: cents, p_date: date,
+        p_category_id: cat, p_paid_by: paidBy, p_split_mode: mode, p_status: draft ? 'draft' : 'validated', p_note: note.trim(), p_maintenance_id: maint,
+        p_shares: preview.shares.filter((s) => s.share_cents > 0 || mode !== 'equal'), p_recurring_id: recurringId,
+      });
+    }, { success: expense ? 'Dépense modifiée' : repeat ? 'Dépense ajoutée et répétée chaque mois' : 'Dépense ajoutée', tables: ['expenses', 'expense_shares', 'recurring_expenses'], key: 'exp-' + clientKey });
     if (r) {
       prefill?.onSaved?.();
       onClose();
@@ -602,6 +635,10 @@ function ExpenseModal({ expense, prefill, onClose }: { expense: Expense | null; 
             </Field>
             <Field label="Statut">
               <label className="toggle"><input type="checkbox" checked={draft} onChange={(e) => setDraft(e.target.checked)} />Provisoire (non comptée dans les soldes)</label>
+            </Field>
+            <Field label="Récurrence" className="full" hint={expense?.recurring_id ? 'Cette dépense provient d’une dépense récurrente (Budget → Récurrentes).' : repeat ? `Créée automatiquement le ${Number(date.slice(8))} de chaque mois (ou le dernier jour du mois), avec le même partage.` : undefined}>
+              {expense ? <span className="small">{expense.recurring_id ? '🔁 Dépense récurrente' : 'Ponctuelle'}</span>
+                : <label className="toggle"><input type="checkbox" checked={repeat} onChange={(e) => setRepeat(e.target.checked)} />Répéter tous les mois (loyer, abonnements…)</label>}
             </Field>
           </div>
         </div>

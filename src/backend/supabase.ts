@@ -4,7 +4,7 @@ import { ConflictError, type AuthUser, type Backend, type DataTable, type Realti
 
 const HOUSE_TABLES: DataTable[] = [
   'zones', 'categories', 'task_templates', 'task_occurrences', 'unavailabilities', 'swap_requests', 'comments',
-  'expenses', 'expense_shares', 'reimbursements', 'budgets', 'shopping_items', 'stocks', 'maintenance',
+  'expenses', 'expense_shares', 'recurring_expenses', 'reimbursements', 'budgets', 'shopping_items', 'stocks', 'maintenance',
 ];
 
 /** Redirection après e-mail (confirmation, mot de passe oublié) : l'adresse actuelle de l'application. */
@@ -56,6 +56,9 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
       }
       case 'expense_shares':
         return fetchAll(() => sb.from('expense_shares').select('*').eq('household_id', hid).order('expense_id'));
+      case 'recurring_expenses':
+        // Table ajoutée par le correctif n°2 : si elle n'existe pas encore, l'application reste utilisable
+        return fetchAll(() => sb.from(table).select('*').eq('household_id', hid).order('id')).catch(() => []);
       default:
         return fetchAll(() => sb.from(table).select('*').eq('household_id', hid).order('id'));
     }
@@ -130,6 +133,12 @@ export function createSupabaseBackend(url: string, anonKey: string): Backend {
       if (error) throw error;
     },
     async rpc(name, args) {
+      // Compatibilité avec une base sans le correctif n°2 : on n'envoie p_recurring_id que s'il est renseigné
+      if (args && 'p_recurring_id' in args && args.p_recurring_id == null) {
+        const { p_recurring_id: _omit, ...rest } = args;
+        void _omit;
+        args = rest;
+      }
       const { data, error } = await sb.rpc(name, args ?? {});
       if (error) {
         if (error.code === 'P0002') throw new ConflictError();

@@ -2,7 +2,7 @@ export type UUID = string;
 export type ISODate = string; // AAAA-MM-JJ
 
 export type Effort = 'light' | 'moderate' | 'heavy';
-export type Frequency = 'daily' | 'weekly' | 'once';
+export type Frequency = 'daily' | 'weekly' | 'monthly' | 'once';
 export type OccStatus = 'todo' | 'in_progress' | 'done' | 'postponed' | 'cancelled';
 export type SplitMode = 'equal' | 'percent' | 'fixed' | 'single';
 
@@ -89,6 +89,8 @@ export interface TaskTemplate {
   instructions: string;
   frequency: Frequency;
   weekdays: number[]; // 1 = lundi … 7 = dimanche
+  /** mensuelle : semaine du mois (1 à 4, -1 = dernière) ; le jour vient de weekdays[0] */
+  month_week: number | null;
   once_date: ISODate | null;
   window_days: number;
   duration_min: number;
@@ -172,6 +174,35 @@ export interface Expense {
   status: 'draft' | 'validated' | 'cancelled';
   note: string;
   maintenance_id: UUID | null;
+  recurring_id: UUID | null;
+  created_by: UUID | null;
+  created_at: string;
+  version: number;
+}
+
+/** Saisie de partage conservée pour regénérer les parts chaque mois. */
+export interface SplitInput {
+  user_id: UUID;
+  value?: number;
+  included?: boolean;
+}
+
+export interface RecurringExpense {
+  id: UUID;
+  household_id: UUID;
+  title: string;
+  amount_cents: number;
+  category_id: UUID | null;
+  paid_by: UUID;
+  split_mode: SplitMode;
+  split_inputs: SplitInput[];
+  day_of_month: number; // 1–31 (ramené au dernier jour si le mois est plus court)
+  start_date: ISODate;
+  end_date: ISODate | null;
+  last_generated: ISODate | null;
+  auto_validate: boolean;
+  active: boolean;
+  note: string;
   created_by: UUID | null;
   created_at: string;
   version: number;
@@ -296,6 +327,7 @@ export interface HouseData {
   comments: Comment[];
   expenses: Expense[];
   expense_shares: ExpenseShare[];
+  recurring_expenses: RecurringExpense[];
   reimbursements: Reimbursement[];
   budgets: Budget[];
   shopping_items: ShoppingItem[];

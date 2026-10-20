@@ -557,3 +557,34 @@ select.pill { appearance: none; padding-right: 30px; background-image: url("data
   .mhead { padding-left: 16px; padding-right: 16px; }
   .greet h1 { font-size: 26px; }
 }
+
+/* =====================================================================
+   Safari / iPhone (y compris l'application installée sur l'écran d'accueil)
+   ===================================================================== */
+html { background: var(--bg); -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }
+button, a, input, select, textarea, [role='button'] { touch-action: manipulation; }
+.topbar { background: var(--bg); background: color-mix(in srgb, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.content { overflow-x: hidden; }
+select, .select, select.pill { -webkit-appearance: none; appearance: none; }
+.select { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2385817a' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 14px center; padding-right: 34px; }
+select.pill.dark { background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+:root[data-theme='dark'] select.pill.dark, :root:not([data-theme='light']) select.pill.dark { color-scheme: light; }
+.input[type='date'], .input[type='time'] { -webkit-appearance: none; appearance: none; display: flex; align-items: center; min-height: 44px; }
+.input[type='date']::-webkit-date-and-time-value, .input[type='time']::-webkit-date-and-time-value { text-align: left; margin: 0; }
+.sidebar { height: 100vh; height: 100dvh; }
+.modal { max-height: calc(100vh - 32px); max-height: calc(100dvh - 32px); }
+.mrow .ttl, .list-item .title { -webkit-user-select: none; user-select: none; }
+
+@media (max-width: 860px) {
+  /* Pas de zoom automatique de Safari à la saisie : 16 px minimum dans les champs */
+  .input, .select, .textarea, .input-sm, .filters .select, .filters .input, select.pill { font-size: 16px; }
+  select.pill.sm { font-size: 16px; height: 36px; }
+  /* Zone de l'heure et de l'encoche (app installée en mode « black-translucent ») */
+  .main { padding-top: env(safe-area-inset-top); }
+  .main::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--bg); z-index: 25; }
+  .topbar { top: env(safe-area-inset-top); padding-top: 8px; padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .content { padding-left: max(16px, env(safe-area-inset-left)); padding-right: max(16px, env(safe-area-inset-right)); }
+  .modal, .modal.wide { max-height: 92vh; max-height: calc(100dvh - env(safe-area-inset-top) - 12px); }
+  .bottom-nav { left: max(12px, env(safe-area-inset-left)); right: max(12px, env(safe-area-inset-right)); }
+}
+.auth-wrap, .loading-screen { padding-top: max(24px, env(safe-area-inset-top)); padding-bottom: max(24px, env(safe-area-inset-bottom)); min-height: 100vh; min-height: 100dvh; }

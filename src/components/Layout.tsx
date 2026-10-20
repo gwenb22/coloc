@@ -6,6 +6,7 @@ import { Icon, Modal } from './ui';
 import { isOpen } from '../lib/fairness';
 import { today } from '../lib/dates';
 import { DEMO_USERS } from '../backend/demo';
+import { useRecurringGenerator } from './useRecurringGenerator';
 
 const NAV = [
   { to: '/', label: 'Accueil', short: 'Accueil', icon: 'home' },
@@ -22,6 +23,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const { data, online, realtime, meId, name, personClass } = useData();
   const loc = useLocation();
   const [menu, setMenu] = useState(false);
+  useRecurringGenerator();
   const unread = data.notifications.filter((n) => !n.read_at).length;
   const pendingSwaps = data.swap_requests.filter((s) => s.status === 'pending' && s.to_user === meId).length;
   const myLate = data.task_occurrences.filter((o) => o.assigned_to === meId && !o.proposed && isOpen(o) && o.due_date < today()).length;

@@ -414,7 +414,7 @@ function Catalogue() {
   const tpls = data.task_templates.filter((tp) => (showArchived ? tp.archived : !tp.archived));
   const groups = zones.map((z) => ({ z, list: tpls.filter((tp) => tp.zone_id === z.id) })).filter((g) => g.list.length || (!showArchived && g.z.active));
   const orphan = tpls.filter((tp) => !zones.some((z) => z.id === tp.zone_id));
-  const weekly = (tp: TaskTemplate) => (tp.frequency === 'daily' ? 7 : tp.frequency === 'weekly' ? (tp.weekdays.length || 1) : 0) * weightOf(tp.duration_min, tp.effort, c);
+  const weekly = (tp: TaskTemplate) => (tp.frequency === 'daily' ? 7 : tp.frequency === 'weekly' ? (tp.weekdays.length || 1) : tp.frequency === 'monthly' ? 12 / 52 : 0) * weightOf(tp.duration_min, tp.effort, c);
   const totalWeekly = data.task_templates.filter((tp) => tp.active && !tp.archived).reduce((a, tp) => a + weekly(tp), 0);
 
   return (

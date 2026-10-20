@@ -62,8 +62,10 @@ export function Modal({ title, onClose, children, footer, wide }: { title: React
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const prev = document.activeElement as HTMLElement | null;
-    const first = ref.current?.querySelector<HTMLElement>('input:not([type=hidden]), select, textarea, button.btn-primary');
-    (first ?? ref.current)?.focus();
+    // Sur écran tactile, ne pas ouvrir le clavier d'office : on place le focus sur la fenêtre elle-même
+    const touch = window.matchMedia?.('(pointer: coarse)').matches;
+    const first = touch ? null : ref.current?.querySelector<HTMLElement>('input:not([type=hidden]), select, textarea, button.btn-primary');
+    (first ?? ref.current)?.focus({ preventScroll: true });
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
     };

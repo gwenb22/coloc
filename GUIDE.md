@@ -20,6 +20,11 @@ Vous aurez besoin de :
 4. Ouvrez le fichier [`supabase/schema.sql`](supabase/schema.sql), copiez **tout** son contenu, collez-le, puis cliquez **Run**.
    Le message « Success. No rows returned » doit s'afficher.
 
+### Mises à jour de la base (bases créées avant octobre 2026)
+Si votre base a été créée avec une ancienne version de `schema.sql`, exécutez une fois, dans l'ordre :
+1. [`supabase/correctif-1-code-invitation.sql`](supabase/correctif-1-code-invitation.sql) — création de la colocation ;
+2. [`supabase/correctif-2-mensuel-et-recurrentes.sql`](supabase/correctif-2-mensuel-et-recurrentes.sql) — tâches mensuelles (vitres, four, micro-ondes, frigo) et dépenses récurrentes.
+
 ### Optionnel : rappels quotidiens automatiques
 Pour recevoir chaque matin dans l'application les tâches du jour, les retards, les échéances d'entretien et les remboursements prévus :
 1. **Database → Extensions** → recherchez `pg_cron` → activez-la.

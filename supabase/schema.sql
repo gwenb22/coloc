@@ -169,8 +169,9 @@ create table public.task_templates (
   name text not null,
   description text not null default '',
   instructions text not null default '',
-  frequency text not null check (frequency in ('daily', 'weekly', 'once')),
+  frequency text not null check (frequency in ('daily', 'weekly', 'monthly', 'once')),
   weekdays int[] not null default '{}', -- 1 = lundi … 7 = dimanche
+  month_week int check (month_week is null or month_week in (-1, 1, 2, 3, 4)), -- mensuelle : n-ième jour du mois
   once_date date,
   window_days int not null default 0 check (window_days between 0 and 6), -- plage de réalisation
   duration_min int not null check (duration_min between 1 and 600),
@@ -270,6 +271,28 @@ create table public.maintenance (
   version int not null default 1
 );
 
+create table public.recurring_expenses (
+  id uuid primary key default gen_random_uuid(),
+  household_id uuid not null references public.households(id) on delete cascade,
+  title text not null check (length(title) between 1 and 120),
+  amount_cents bigint not null check (amount_cents > 0),
+  category_id uuid references public.categories(id),
+  paid_by uuid not null references public.profiles(id),
+  split_mode text not null check (split_mode in ('equal', 'percent', 'fixed', 'single')),
+  split_inputs jsonb not null default '[]'::jsonb, -- saisie de partage, recalculée chaque mois
+  day_of_month int not null check (day_of_month between 1 and 31),
+  start_date date not null default current_date,
+  end_date date,
+  last_generated date,
+  auto_validate boolean not null default true,
+  active boolean not null default true,
+  note text not null default '',
+  created_by uuid references public.profiles(id) default auth.uid(),
+  created_at timestamptz not null default now(),
+  version int not null default 1,
+  check (end_date is null or end_date >= start_date)
+);
+
 create table public.expenses (
   id uuid primary key default gen_random_uuid(),
   household_id uuid not null references public.households(id) on delete cascade,
@@ -283,6 +306,7 @@ create table public.expenses (
   status text not null default 'validated' check (status in ('draft', 'validated', 'cancelled')),
   note text not null default '',
   maintenance_id uuid references public.maintenance(id),
+  recurring_id uuid references public.recurring_expenses(id) on delete set null,
   created_by uuid references public.profiles(id) default auth.uid(),
   created_at timestamptz not null default now(),
   version int not null default 1
@@ -416,6 +440,8 @@ create trigger chk_exp_members before insert or update on public.expenses
   for each row execute function public.check_member_columns('paid_by');
 create trigger chk_share_members before insert or update on public.expense_shares
   for each row execute function public.check_member_columns('user_id');
+create trigger chk_recur_members before insert or update on public.recurring_expenses
+  for each row execute function public.check_member_columns('paid_by');
 create trigger chk_reimb_members before insert or update on public.reimbursements
   for each row execute function public.check_member_columns('from_user', 'to_user');
 create trigger chk_shop_members before insert or update on public.shopping_items
@@ -428,7 +454,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['profiles','households','zones','categories','task_templates','task_occurrences',
-    'swap_requests','maintenance','expenses','reimbursements','budgets','stocks','shopping_items'] loop
+    'swap_requests','maintenance','expenses','recurring_expenses','reimbursements','budgets','stocks','shopping_items'] loop
     execute format('create trigger %I before update on public.%I for each row execute function public.bump_version()',
       'bump_' || t, t);
   end loop;
@@ -624,6 +650,7 @@ alter table public.swap_requests enable row level security;
 alter table public.comments enable row level security;
 alter table public.maintenance enable row level security;
 alter table public.expenses enable row level security;
+alter table public.recurring_expenses enable row level security;
 alter table public.expense_shares enable row level security;
 alter table public.reimbursements enable row level security;
 alter table public.budgets enable row level security;
@@ -654,12 +681,12 @@ do $$
 declare t text;
 begin
   foreach t in array array['zones','categories','task_templates','task_occurrences','unavailabilities',
-    'swap_requests','maintenance','reimbursements','budgets','stocks','shopping_items','comments'] loop
+    'swap_requests','maintenance','recurring_expenses','reimbursements','budgets','stocks','shopping_items','comments'] loop
     execute format('create policy %I on public.%I for select using (public.is_member(household_id))', t || '_select', t);
     execute format('create policy %I on public.%I for insert with check (public.is_member(household_id))', t || '_insert', t);
     execute format('create policy %I on public.%I for update using (public.is_member(household_id)) with check (public.is_member(household_id))', t || '_update', t);
   end loop;
-  foreach t in array array['unavailabilities','budgets','stocks'] loop
+  foreach t in array array['unavailabilities','budgets','stocks','recurring_expenses'] loop
     execute format('create policy %I on public.%I for delete using (public.is_member(household_id))', t || '_delete', t);
   end loop;
 end $$;
@@ -745,23 +772,26 @@ begin
 
   -- Tâches d'exemple (modifiables, archivables)
   for z in select id, name from public.zones where household_id = hid loop
-    insert into public.task_templates (household_id, zone_id, name, frequency, weekdays, duration_min, effort, created_by)
-    select hid, z.id, t.name, t.freq, t.days, t.dur, t.eff, uid
+    insert into public.task_templates (household_id, zone_id, name, frequency, weekdays, month_week, duration_min, effort, created_by)
+    select hid, z.id, t.name, t.freq, t.days, t.mw, t.dur, t.eff, uid
     from (values
-      ('Cuisine', 'Vaisselle et plans de travail', 'daily', '{}'::int[], 15, 'light'),
-      ('Cuisine', 'Sortir les poubelles', 'weekly', '{1,4}'::int[], 5, 'light'),
-      ('Cuisine', 'Nettoyer les plaques', 'weekly', '{3}'::int[], 10, 'moderate'),
-      ('Cuisine', 'Laver le sol de la cuisine', 'weekly', '{6}'::int[], 15, 'moderate'),
-      ('Cuisine', 'Nettoyer le réfrigérateur', 'weekly', '{7}'::int[], 25, 'heavy'),
-      ('Salle de bain', 'Nettoyer la douche', 'weekly', '{6}'::int[], 20, 'heavy'),
-      ('Salle de bain', 'Lavabo et miroir', 'weekly', '{3}'::int[], 10, 'light'),
-      ('Salle de bain', 'Sol de la salle de bain', 'weekly', '{6}'::int[], 10, 'moderate'),
-      ('WC', 'Nettoyer la cuvette et désinfecter', 'weekly', '{2,6}'::int[], 10, 'heavy'),
-      ('Salon', 'Ranger et dépoussiérer', 'weekly', '{5}'::int[], 15, 'light'),
-      ('Salon', 'Aspirer le salon', 'weekly', '{6}'::int[], 20, 'moderate'),
-      ('Entrée', 'Ranger les chaussures et nettoyer le sol', 'weekly', '{7}'::int[], 10, 'light'),
-      ('Balcon / terrasse', 'Balayer le balcon', 'weekly', '{7}'::int[], 15, 'moderate')
-    ) as t(zone, name, freq, days, dur, eff)
+      ('Cuisine', 'Vaisselle et plans de travail', 'daily', '{}'::int[], null::int, 15, 'light'),
+      ('Cuisine', 'Sortir les poubelles', 'weekly', '{1,4}'::int[], null::int, 5, 'light'),
+      ('Cuisine', 'Nettoyer les plaques', 'weekly', '{3}'::int[], null::int, 10, 'moderate'),
+      ('Cuisine', 'Laver le sol de la cuisine', 'weekly', '{6}'::int[], null::int, 15, 'moderate'),
+      ('Salle de bain', 'Nettoyer la douche', 'weekly', '{6}'::int[], null::int, 20, 'heavy'),
+      ('Salle de bain', 'Lavabo et miroir', 'weekly', '{3}'::int[], null::int, 10, 'light'),
+      ('Salle de bain', 'Sol de la salle de bain', 'weekly', '{6}'::int[], null::int, 10, 'moderate'),
+      ('WC', 'Nettoyer la cuvette et désinfecter', 'weekly', '{2,6}'::int[], null::int, 10, 'heavy'),
+      ('Salon', 'Ranger et dépoussiérer', 'weekly', '{5}'::int[], null::int, 15, 'light'),
+      ('Salon', 'Aspirer le salon', 'weekly', '{6}'::int[], null::int, 20, 'moderate'),
+      ('Entrée', 'Ranger les chaussures et nettoyer le sol', 'weekly', '{7}'::int[], null::int, 10, 'light'),
+      ('Balcon / terrasse', 'Balayer le balcon', 'weekly', '{7}'::int[], null::int, 15, 'moderate'),
+      ('Salon', 'Laver les vitres', 'monthly', '{6}'::int[], 1, 45, 'heavy'),
+      ('Cuisine', 'Nettoyer le four', 'monthly', '{6}'::int[], 2, 30, 'heavy'),
+      ('Cuisine', 'Nettoyer le micro-ondes', 'monthly', '{6}'::int[], 3, 10, 'moderate'),
+      ('Cuisine', 'Nettoyer le frigo', 'monthly', '{6}'::int[], 4, 25, 'heavy')
+    ) as t(zone, name, freq, days, mw, dur, eff)
     where t.zone = z.name;
   end loop;
 
@@ -864,7 +894,7 @@ end $$;
 create or replace function public.save_expense(
   p_id uuid, p_client_key uuid, p_version int, p_title text, p_amount_cents bigint, p_date date,
   p_category_id uuid, p_paid_by uuid, p_split_mode text, p_status text, p_note text,
-  p_maintenance_id uuid, p_shares jsonb
+  p_maintenance_id uuid, p_shares jsonb, p_recurring_id uuid default null
 ) returns uuid
 language plpgsql security definer set search_path = public as $$
 declare
@@ -898,9 +928,9 @@ begin
     select id into eid from public.expenses where client_key = p_client_key and household_id = hid;
     if eid is not null then return eid; end if;
     insert into public.expenses (household_id, client_key, title, amount_cents, date, category_id, paid_by,
-      split_mode, status, note, maintenance_id)
+      split_mode, status, note, maintenance_id, recurring_id)
     values (hid, p_client_key, p_title, p_amount_cents, p_date, p_category_id, p_paid_by,
-      p_split_mode, coalesce(p_status, 'validated'), coalesce(p_note, ''), p_maintenance_id)
+      p_split_mode, coalesce(p_status, 'validated'), coalesce(p_note, ''), p_maintenance_id, p_recurring_id)
     returning id into eid;
   else
     update public.expenses set title = p_title, amount_cents = p_amount_cents, date = p_date,
@@ -975,7 +1005,7 @@ begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
     foreach t in array array['households','household_members','profiles','zones','categories','task_templates',
       'task_occurrences','unavailabilities','swap_requests','comments','maintenance','expenses','expense_shares',
-      'reimbursements','budgets','stocks','shopping_items','notifications'] loop
+      'reimbursements','budgets','stocks','shopping_items','notifications','recurring_expenses'] loop
       execute format('alter publication supabase_realtime add table public.%I', t);
     end loop;
   end if;

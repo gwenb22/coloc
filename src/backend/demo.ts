@@ -11,7 +11,7 @@ import { ConflictError, type AuthUser, type Backend } from './types';
  * Reproduit les principales règles du serveur (parts exactes, anti-doublons, échanges, notifications).
  */
 
-const DB_KEY = 'coloc-demo-db-v1';
+const DB_KEY = 'coloc-demo-db-v2';
 const USER_KEY = 'coloc-demo-user';
 export const DEMO_USERS = [
   { id: 'd0000000-0000-4000-8000-00000000a1e5', email: 'alex@demo', name: 'Alex' },
@@ -30,7 +30,11 @@ const authListeners = new Set<(u: AuthUser | null, e: string) => void>();
 function load(): DB {
   try {
     const raw = localStorage.getItem(DB_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw) {
+      const d = JSON.parse(raw) as DB;
+      for (const t of ['recurring_expenses']) d[t] ??= [];
+      return d;
+    }
   } catch {
     /* stockage indisponible */
   }
@@ -89,12 +93,13 @@ function log(h: string, entity: string, entity_id: string | null, action: string
 const DEFAULTS: Record<string, () => Row> = {
   zones: () => ({ icon: '🏠', active: true, position: 0 }),
   categories: () => ({ position: 0, archived: false }),
-  task_templates: () => ({ description: '', instructions: '', weekdays: [], once_date: null, window_days: 0, effort: 'moderate', preferred_user: null, fixed_user: null, start_date: today(), end_date: null, active: true, archived: false, created_by: uid() }),
+  task_templates: () => ({ description: '', instructions: '', weekdays: [], month_week: null, once_date: null, window_days: 0, effort: 'moderate', preferred_user: null, fixed_user: null, start_date: today(), end_date: null, active: true, archived: false, created_by: uid() }),
   task_occurrences: () => ({ status: 'todo', proposed: false, locked: false, done_at: null, done_by: null, actual_min: null, problem: null }),
   unavailabilities: () => ({ note: '' }),
   swap_requests: () => ({ message: '', status: 'pending', responded_at: null }),
   comments: () => ({ user_id: uid() }),
   reimbursements: () => ({ note: '', status: 'done', created_by: uid() }),
+  recurring_expenses: () => ({ category_id: null, split_inputs: [], start_date: today(), end_date: null, last_generated: null, auto_validate: true, active: true, note: '', created_by: uid() }),
   budgets: () => ({ month: 0, category_limits: {} }),
   shopping_items: () => ({ quantity: 1, unit: '', category: 'Autres', priority: 'normal', assigned_to: null, status: 'to_buy', note: '', price_estimate_cents: null, stock_id: null, bought_at: null, bought_by: null, created_by: uid() }),
   stocks: () => ({ quantity: 0, unit: '', min_threshold: 1, location: '', updated_at: now() }),
@@ -172,7 +177,7 @@ const rpcs: Record<string, (a: Row) => unknown> = {
     if (a.p_split_mode === 'percent' && Math.abs(shares.reduce((s, x) => s + Number(x.percent ?? 0), 0) - 100) > 0.001) fail('Les pourcentages doivent totaliser 100 %.');
     const fields = {
       title: a.p_title, amount_cents: a.p_amount_cents, date: a.p_date, category_id: a.p_category_id, paid_by: a.p_paid_by,
-      split_mode: a.p_split_mode, status: a.p_status ?? 'validated', note: a.p_note ?? '', maintenance_id: a.p_maintenance_id,
+      split_mode: a.p_split_mode, status: a.p_status ?? 'validated', note: a.p_note ?? '', maintenance_id: a.p_maintenance_id, recurring_id: a.p_recurring_id ?? null,
     };
     let e: Row | undefined;
     if (!a.p_id) {
@@ -273,7 +278,7 @@ export function createDemoBackend(): Backend {
         profiles: structuredClone(db.profiles.filter((p) => memberIds.includes(p.id))),
         zones: pick('zones'), categories: pick('categories'), task_templates: pick('task_templates'),
         task_occurrences: pick('task_occurrences'), unavailabilities: pick('unavailabilities'), swap_requests: pick('swap_requests'),
-        comments: pick('comments'), expenses: pick('expenses'), expense_shares: pick('expense_shares'),
+        comments: pick('comments'), expenses: pick('expenses'), expense_shares: pick('expense_shares'), recurring_expenses: pick('recurring_expenses'),
         reimbursements: pick('reimbursements'), budgets: pick('budgets'), shopping_items: pick('shopping_items'),
         stocks: pick('stocks'), maintenance: pick('maintenance'),
         notifications: structuredClone(db.notifications.filter((n) => n.household_id === h && n.user_id === uid())),
@@ -356,7 +361,7 @@ function seed(): DB {
     ],
     profiles: DEMO_USERS.map((u) => ({ id: u.id, display_name: u.name, notif_prefs: {}, ui_prefs: {}, deleted: false, version: 1, created_at: now() })),
     zones: [], categories: [], task_templates: [], task_occurrences: [], unavailabilities: [], swap_requests: [], comments: [],
-    expenses: [], expense_shares: [], reimbursements: [], budgets: [], shopping_items: [], stocks: [], maintenance: [], notifications: [], activity_log: [],
+    expenses: [], expense_shares: [], recurring_expenses: [], reimbursements: [], budgets: [], shopping_items: [], stocks: [], maintenance: [], notifications: [], activity_log: [],
   };
   const zones = [['Cuisine', '🍳'], ['Salle de bain', '🛁'], ['WC', '🚽'], ['Salon', '🛋️'], ['Entrée', '🚪'], ['Balcon / terrasse', '🌿']];
   zones.forEach(([name, icon], i) => d.zones.push({ id: uuid(), household_id: h, name, icon, active: true, position: i + 1, version: 1 }));
@@ -372,7 +377,6 @@ function seed(): DB {
     ['Cuisine', 'Sortir les poubelles', 'weekly', [1, 4], 5, 'light', 'Tri : jaune le lundi, verre le jeudi.'],
     ['Cuisine', 'Nettoyer les plaques', 'weekly', [3], 10, 'moderate'],
     ['Cuisine', 'Laver le sol de la cuisine', 'weekly', [6], 15, 'moderate'],
-    ['Cuisine', 'Nettoyer le réfrigérateur', 'weekly', [7], 25, 'heavy', 'Jeter les produits périmés, vinaigre blanc.'],
     ['Salle de bain', 'Nettoyer la douche', 'weekly', [6], 20, 'heavy', 'Anticalcaire, rincer, raclette.'],
     ['Salle de bain', 'Lavabo et miroir', 'weekly', [3], 10, 'light'],
     ['Salle de bain', 'Sol de la salle de bain', 'weekly', [6], 10, 'moderate'],
@@ -382,9 +386,22 @@ function seed(): DB {
     ['Entrée', 'Ranger les chaussures et nettoyer le sol', 'weekly', [7], 10, 'light'],
     ['Balcon / terrasse', 'Balayer le balcon', 'weekly', [7], 15, 'moderate'],
   ];
+  const monthly: [string, string, number, number, 'light' | 'moderate' | 'heavy', string][] = [
+    ['Salon', 'Laver les vitres', 1, 45, 'heavy', 'Produit vitres et chiffon microfibre, sans oublier les encadrements.'],
+    ['Cuisine', 'Nettoyer le four', 2, 30, 'heavy', 'Pâte de bicarbonate, laisser poser, puis rincer.'],
+    ['Cuisine', 'Nettoyer le micro-ondes', 3, 10, 'moderate', 'Bol d’eau citronnée 3 min, puis essuyer.'],
+    ['Cuisine', 'Nettoyer le frigo', 4, 25, 'heavy', 'Jeter les produits périmés, vinaigre blanc.'],
+  ];
+  for (const [zone, name, mw, duration_min, effort, instructions] of monthly) {
+    d.task_templates.push({
+      id: uuid(), household_id: h, zone_id: zid(zone), name, description: '', instructions, frequency: 'monthly', weekdays: [6], month_week: mw, once_date: null,
+      window_days: 2, duration_min, effort, preferred_user: null, fixed_user: null, start_date: addDays(t, -60), end_date: null,
+      active: true, archived: false, created_by: A, created_at: now(), version: 1,
+    });
+  }
   for (const [zone, name, frequency, weekdays, duration_min, effort, instructions] of tpls) {
     d.task_templates.push({
-      id: uuid(), household_id: h, zone_id: zid(zone), name, description: '', instructions: instructions ?? '', frequency, weekdays, once_date: null,
+      id: uuid(), household_id: h, zone_id: zid(zone), name, description: '', instructions: instructions ?? '', frequency, weekdays, month_week: null, once_date: null,
       window_days: 0, duration_min, effort, preferred_user: null, fixed_user: null, start_date: addDays(t, -28), end_date: null,
       active: true, archived: false, created_by: A, created_at: now(), version: 1,
     });
@@ -421,18 +438,26 @@ function seed(): DB {
   const month = t.slice(0, 7);
   const addExp = (title: string, cents: number, date: string, category: string, paid_by: string, mode: 'equal' | 'percent' | 'single' = 'equal', pct?: number[]) => {
     const id = uuid();
-    d.expenses.push({ id, household_id: h, client_key: uuid(), title, amount_cents: cents, date, category_id: cat(category), paid_by, split_mode: mode, status: 'validated', note: '', maintenance_id: null, created_by: paid_by, created_at: now(), version: 1 });
+    d.expenses.push({ id, household_id: h, client_key: uuid(), title, amount_cents: cents, date, category_id: cat(category), paid_by, split_mode: mode, status: 'validated', note: '', maintenance_id: null, recurring_id: null, created_by: paid_by, created_at: now(), version: 1 });
     const inputs = mode === 'single' ? [{ user_id: paid_by === A ? B : A }] : [{ user_id: A, value: pct?.[0] }, { user_id: B, value: pct?.[1] }];
     for (const s of computeShares(cents, mode, inputs)) d.expense_shares.push({ expense_id: id, household_id: h, ...s });
   };
+  const loyerRule = uuid(), boxRule = uuid();
+  d.recurring_expenses.push(
+    { id: loyerRule, household_id: h, title: 'Loyer', amount_cents: 120000, category_id: cat('Loyer'), paid_by: A, split_mode: 'equal', split_inputs: [{ user_id: A, included: true }, { user_id: B, included: true }], day_of_month: 1, start_date: toISO(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1)), end_date: null, last_generated: `${month}-01`, auto_validate: true, active: true, note: '', created_by: A, created_at: now(), version: 1 },
+    { id: boxRule, household_id: h, title: 'Box internet', amount_cents: 2999, category_id: cat('Internet'), paid_by: B, split_mode: 'equal', split_inputs: [{ user_id: A, included: true }, { user_id: B, included: true }], day_of_month: 5, start_date: `${month}-05`, end_date: null, last_generated: `${month}-05`, auto_validate: true, active: true, note: '', created_by: B, created_at: now(), version: 1 },
+  );
   addExp('Loyer', 120000, `${month}-01`, 'Loyer', A);
+  d.expenses[d.expenses.length - 1].recurring_id = loyerRule;
   addExp('Box internet', 2999, `${month}-05`, 'Internet', B);
+  d.expenses[d.expenses.length - 1].recurring_id = boxRule;
   addExp('Courses Carrefour', 6420, addDays(t, -6), 'Courses alimentaires', A);
   addExp('Produits ménagers', 1835, addDays(t, -4), 'Produits ménagers', B);
   addExp('Électricité', 8400, addDays(t, -10), 'Électricité et gaz', A, 'percent', [60, 40]);
   addExp('Place de cinéma', 1150, addDays(t, -2), 'Autres dépenses', A, 'single');
   const prev = toISO(new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1));
   addExp('Loyer', 120000, prev, 'Loyer', A);
+  d.expenses[d.expenses.length - 1].recurring_id = loyerRule;
   addExp('Courses', 9280, addDays(prev, 12), 'Courses alimentaires', B);
   d.reimbursements.push({ id: uuid(), household_id: h, client_key: uuid(), from_user: B, to_user: A, amount_cents: 60000, date: addDays(prev, 2), note: 'Loyer', status: 'done', created_by: B, created_at: now(), version: 1 });
   const [y, m] = month.split('-').map(Number);

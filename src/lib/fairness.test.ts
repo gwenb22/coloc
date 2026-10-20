@@ -4,7 +4,7 @@ import { fairnessStats, planAssignments, weightOf } from './fairness';
 
 const A = 'a', B = 'b';
 const tpl = (id: string, p: Partial<TaskTemplate>): TaskTemplate => ({
-  id, household_id: 'h', zone_id: null, name: id, description: '', instructions: '', frequency: 'weekly', weekdays: [1],
+  id, household_id: 'h', zone_id: null, name: id, description: '', instructions: '', frequency: 'weekly', weekdays: [1], month_week: null,
   once_date: null, window_days: 0, duration_min: 10, effort: 'light', preferred_user: null, fixed_user: null,
   start_date: '2026-01-01', end_date: null, active: true, archived: false, created_by: null, created_at: '', version: 1, ...p,
 });
