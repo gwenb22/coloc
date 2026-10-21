@@ -97,6 +97,8 @@ export interface TaskTemplate {
   month_week: number | null;
   /** groupe nommé : tâches faites le même jour par la même personne (ex. « Sols ») */
   group_name: string | null;
+  /** supprimée du catalogue (réalisations conservées dans l'historique) */
+  deleted_at?: string | null;
   once_date: ISODate | null;
   window_days: number;
   duration_min: number;

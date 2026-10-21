@@ -22,7 +22,7 @@ export function GroupModal({ group, onClose }: { group: string | null; onClose: 
   const [color, setColor] = useState(current?.color ?? GROUP_COLORS[groups.length % GROUP_COLORS.length]);
   const [day, setDay] = useState<number | ''>('');
   const inGroup = (t: TaskTemplate) => !!group && t.group_name?.trim().toLowerCase() === group.toLowerCase();
-  const templates = useMemo(() => data.task_templates.filter((t) => !t.archived), [data.task_templates]);
+  const templates = useMemo(() => data.task_templates.filter((t) => !t.archived && !t.deleted_at && t.frequency !== 'once'), [data.task_templates]);
   const [selected, setSelected] = useState<Set<string>>(() => new Set(templates.filter(inGroup).map((t) => t.id)));
   const [err, setErr] = useState('');
   const zones = [...data.zones].sort((a, b) => a.position - b.position);

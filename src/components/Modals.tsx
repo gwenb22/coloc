@@ -65,12 +65,38 @@ export function ModalsProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/**
+ * Supprimer une tâche : définitive si elle n'a jamais été réalisée,
+ * sinon retirée du catalogue en gardant ses réalisations dans l'historique et l'équilibre.
+ */
+function useDeleteTemplate() {
+  const { data, run } = useData();
+  const confirm = useConfirm();
+  return async (tpl: TaskTemplate): Promise<boolean> => {
+    const done = data.task_occurrences.filter((o) => o.template_id === tpl.id && o.status === 'done').length;
+    const ok = await confirm({
+      title: `Supprimer « ${tpl.name} » ?`,
+      message: done
+        ? `Elle disparaîtra du catalogue et ne sera plus planifiée. ${done === 1 ? 'Sa réalisation reste' : `Ses ${done} réalisations restent`} dans l’historique et dans l’équilibre.`
+        : 'Elle n’a jamais été réalisée : elle sera supprimée définitivement, avec ses occurrences à venir.',
+      confirm: 'Supprimer', danger: true,
+    });
+    if (!ok) return false;
+    const r = await run(() => backend.rpc<string>('delete_task_template', { p_id: tpl.id }), {
+      success: done ? 'Tâche retirée du catalogue (historique conservé)' : 'Tâche supprimée',
+      tables: ['task_templates', 'task_occurrences', 'swap_requests'], key: 'del-' + tpl.id,
+    });
+    return r !== undefined;
+  };
+}
+
 // =====================================================================
 // Détail d'une occurrence de tâche
 // =====================================================================
 function OccurrenceModal({ id, onClose }: { id: UUID; onClose: () => void }) {
   const { data, run, meId, otherId, name, zone } = useData();
   const confirm = useConfirm();
+  const deleteTemplate = useDeleteTemplate();
   const o = data.task_occurrences.find((x) => x.id === id);
   const tpl = data.task_templates.find((t) => t.id === o?.template_id);
   const [panel, setPanel] = useState<'none' | 'done' | 'postpone' | 'swap' | 'problem'>('none');
@@ -164,6 +190,11 @@ function OccurrenceModal({ id, onClose }: { id: UUID; onClose: () => void }) {
               upd({ status: 'cancelled' }, 'Occurrence annulée');
             }
           }}><Icon name="x" size={14} />Annuler</button>
+        </div>
+      )}
+      {tpl?.frequency === 'once' && (
+        <div className="row-wrap">
+          <button className="btn btn-sm btn-danger" onClick={async () => { if (await deleteTemplate(tpl)) onClose(); }}><Icon name="trash" size={14} />Supprimer cette tâche ponctuelle</button>
         </div>
       )}
 
@@ -334,6 +365,7 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
     if (saved) onClose();
   };
 
+  const deleteTemplate = useDeleteTemplate();
   const archive = async () => {
     if (!tpl) return;
     if (await confirm({ title: 'Archiver cette tâche ?', message: 'Elle ne sera plus planifiée. Les occurrences passées restent dans l’historique ; les occurrences futures non terminées sont annulées.', confirm: 'Archiver', danger: true })) {
@@ -350,7 +382,8 @@ function TemplateModal({ tpl, defaults, onClose }: { tpl: TaskTemplate | null; d
   return (
     <Modal title={tpl ? 'Modifier la tâche' : f.frequency === 'once' ? 'Nouvelle tâche ponctuelle' : 'Nouvelle tâche'} onClose={onClose} wide footer={
       <>
-        {tpl && !tpl.archived && <button className="btn btn-danger" style={{ marginRight: 'auto' }} onClick={archive}><Icon name="box" size={14} />Archiver</button>}
+        {tpl && <button className="btn btn-danger" style={{ marginRight: 'auto' }} onClick={async () => { if (await deleteTemplate(tpl)) onClose(); }}><Icon name="trash" size={14} />Supprimer</button>}
+        {tpl && !tpl.archived && tpl.frequency !== 'once' && <button className="btn" onClick={archive}><Icon name="box" size={14} />Archiver</button>}
         {tpl?.archived && <button className="btn" style={{ marginRight: 'auto' }} onClick={() => run(() => backend.update('task_templates', tpl.id, { archived: false, active: true }, tpl.version), { success: 'Tâche réactivée', tables: ['task_templates'] }).then(onClose)}>Réactiver</button>}
         <button className="btn" onClick={onClose}>Annuler</button>
         <button className="btn btn-primary" onClick={save}>Enregistrer</button>

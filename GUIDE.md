@@ -25,7 +25,8 @@ Si votre base a été créée avec une ancienne version de `schema.sql`, exécut
 1. [`supabase/correctif-1-code-invitation.sql`](supabase/correctif-1-code-invitation.sql) — création de la colocation ;
 2. [`supabase/correctif-2-mensuel-et-recurrentes.sql`](supabase/correctif-2-mensuel-et-recurrentes.sql) — tâches mensuelles (vitres, four, micro-ondes, frigo) et dépenses récurrentes ;
 3. [`supabase/correctif-3-regroupements.sql`](supabase/correctif-3-regroupements.sql) — groupes de tâches « Sols » et « Linge » pour la répartition ;
-4. [`supabase/correctif-4-chambre-privee.sql`](supabase/correctif-4-chambre-privee.sql) — « Ma chambre » : tâches privées de chacune.
+4. [`supabase/correctif-4-chambre-privee.sql`](supabase/correctif-4-chambre-privee.sql) — « Ma chambre » : tâches privées de chacune ;
+5. [`supabase/correctif-5-suppression-taches.sql`](supabase/correctif-5-suppression-taches.sql) — suppression des tâches (historique conservé si déjà réalisées).
 
 ### Optionnel : rappels quotidiens automatiques
 Pour recevoir chaque matin dans l'application les tâches du jour, les retards, les échéances d'entretien et les remboursements prévus :

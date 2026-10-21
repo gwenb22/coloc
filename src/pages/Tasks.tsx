@@ -415,7 +415,8 @@ function Catalogue() {
   const [showArchived, setShowArchived] = useState(false);
   const c = coefs(data.household.settings);
   const zones = [...data.zones].sort((a, b) => a.position - b.position);
-  const tpls = data.task_templates.filter((tp) => (showArchived ? tp.archived : !tp.archived));
+  // Le catalogue ne liste que les tâches récurrentes ; les tâches ponctuelles et supprimées n'y figurent pas
+  const tpls = data.task_templates.filter((tp) => tp.frequency !== 'once' && !tp.deleted_at && (showArchived ? tp.archived : !tp.archived));
   const groups = zones.map((z) => ({ z, list: tpls.filter((tp) => tp.zone_id === z.id) })).filter((g) => g.list.length || (!showArchived && g.z.active));
   const orphan = tpls.filter((tp) => !zones.some((z) => z.id === tp.zone_id));
   const weekly = (tp: TaskTemplate) => (tp.frequency === 'daily' ? 7 : tp.frequency === 'weekly' ? (tp.weekdays.length || 1) : tp.frequency === 'monthly' ? 12 / 52 : 0) * weightOf(tp.duration_min, tp.effort, c);

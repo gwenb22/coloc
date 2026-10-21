@@ -167,6 +167,23 @@ const rpcs: Record<string, (a: Row) => unknown> = {
     log(h, 'household', h, 'transfer_owner', { to: a.p_user });
     return null;
   },
+  delete_task_template: (a) => {
+    const tpl = db.task_templates.find((x) => x.id === a.p_id);
+    if (!tpl) fail('Tâche introuvable.');
+    const open = new Set(db.task_occurrences.filter((o) => o.template_id === tpl.id && ['todo', 'in_progress', 'postponed'].includes(o.status)).map((o) => o.id));
+    db.swap_requests = db.swap_requests.filter((r) => !open.has(r.occurrence_id));
+    db.task_occurrences = db.task_occurrences.filter((o) => !open.has(o.id));
+    const done = db.task_occurrences.some((o) => o.template_id === tpl.id && o.status === 'done');
+    if (!done) {
+      db.task_occurrences = db.task_occurrences.filter((o) => o.template_id !== tpl.id);
+      db.task_templates = db.task_templates.filter((x) => x.id !== tpl.id);
+      log(tpl.household_id, 'template', tpl.id, 'delete', { name: tpl.name });
+      return 'deleted';
+    }
+    Object.assign(tpl, { deleted_at: now(), archived: true, active: false, version: tpl.version + 1 });
+    log(tpl.household_id, 'template', tpl.id, 'hide', { name: tpl.name });
+    return 'hidden';
+  },
   leave_household: () => fail('Non disponible en mode démo. Utilisez « Réinitialiser la démo ».'),
   delete_my_account: () => fail('Non disponible en mode démo.'),
   save_expense: (a) => {
@@ -330,7 +347,7 @@ export function createDemoBackend(): Backend {
       const fn = rpcs[name];
       if (!fn) fail(`Fonction inconnue : ${name}`);
       const res = fn(args ?? {});
-      save(['expenses', 'expense_shares', 'swap_requests', 'task_occurrences', 'household_members', 'notifications', 'activity_log']);
+      save(['expenses', 'expense_shares', 'swap_requests', 'task_occurrences', 'task_templates', 'household_members', 'notifications', 'activity_log']);
       return res as any;
     },
     subscribe(_h, _u, onChange, onStatus) {

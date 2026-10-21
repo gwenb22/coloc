@@ -173,6 +173,7 @@ create table public.task_templates (
   weekdays int[] not null default '{}', -- 1 = lundi … 7 = dimanche
   month_week int check (month_week is null or month_week in (-1, 1, 2, 3, 4)), -- mensuelle : n-ième jour du mois
   group_name text check (group_name is null or length(group_name) between 1 and 40), -- même jour, même personne
+  deleted_at timestamptz, -- tâche supprimée du catalogue, historique conservé
   once_date date,
   window_days int not null default 0 check (window_days between 0 and 6), -- plage de réalisation
   duration_min int not null check (duration_min between 1 and 600),
@@ -994,6 +995,41 @@ end $$;
 revoke all on all tables in schema public from anon;
 grant select, insert, update, delete on all tables in schema public to authenticated;
 grant usage, select on all sequences in schema public to authenticated;
+
+-- Suppression d'une tâche : définitive si jamais réalisée, sinon masquée (historique conservé)
+create or replace function public.delete_task_template(p_id uuid) returns text
+language plpgsql security definer set search_path = public as $$
+declare
+  t record;
+  done_count int;
+begin
+  select * into t from public.task_templates where id = p_id for update;
+  if t.id is null or not public.is_member(t.household_id) then
+    raise exception 'Tâche introuvable.' using errcode = 'P0001';
+  end if;
+  select count(*) into done_count from public.task_occurrences where template_id = p_id and status = 'done';
+
+  -- Les occurrences non réalisées (à faire, en cours, reportées, proposées) ne sont pas de l'historique
+  delete from public.swap_requests where occurrence_id in (
+    select id from public.task_occurrences where template_id = p_id and status in ('todo', 'in_progress', 'postponed'));
+  delete from public.task_occurrences where template_id = p_id and status in ('todo', 'in_progress', 'postponed');
+
+  if done_count = 0 then
+    delete from public.swap_requests where occurrence_id in (select id from public.task_occurrences where template_id = p_id);
+    delete from public.task_occurrences where template_id = p_id;
+    delete from public.comments where entity = 'occurrence' and entity_id not in (select id from public.task_occurrences);
+    delete from public.task_templates where id = p_id;
+    perform public.log_action(t.household_id, 'template', p_id, 'delete', jsonb_build_object('name', t.name));
+    return 'deleted';
+  end if;
+
+  update public.task_templates set deleted_at = now(), archived = true, active = false where id = p_id;
+  perform public.log_action(t.household_id, 'template', p_id, 'hide', jsonb_build_object('name', t.name, 'done', done_count));
+  return 'hidden';
+end $$;
+
+revoke execute on function public.delete_task_template(uuid) from public, anon;
+grant execute on function public.delete_task_template(uuid) to authenticated;
 
 -- Accès des rôles aux fonctions
 revoke execute on function public.delete_my_account() from public, anon;
