@@ -655,3 +655,10 @@ img.auth-logo { border-radius: 14px; width: 60px; height: 60px; }
   .topbar { padding-bottom: 12px; }
   .content { padding-top: 16px; }
 }
+
+@media (max-width: 860px) {
+  /* Zone qui défile en disposition simple (bloc) : aucun élément ne peut y être comprimé */
+  .main { display: block; }
+  .topbar { min-height: 0; height: auto; }
+}
+.app-version { font-size: 11px; color: var(--text-3); text-align: center; padding: 8px 0 4px; }

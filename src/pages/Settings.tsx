@@ -28,6 +28,7 @@ export default function SettingsPage() {
           <ExportCard />
         </div>
       </div>
+      <div className="app-version">Coloc · version {__APP_VERSION__}</div>
     </>
   );
 }
