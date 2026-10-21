@@ -40,7 +40,7 @@ export default function CalendarPage() {
   const [zoneF, setZoneF] = useState<UUID | 'all'>('all');
   const [statusF, setStatusF] = useState<'all' | 'open' | 'done'>('all');
   const [showFilters, setShowFilters] = useState(false);
-  const [show, setShow] = useState({ tasks: true, forecast: true, room: true, maintenance: true, reimb: true, expenses: !!me?.ui_prefs?.calendar_show_expenses });
+  const [show, setShow] = useState({ tasks: true, forecast: false, room: true, maintenance: true, reimb: true, expenses: !!me?.ui_prefs?.calendar_show_expenses });
   const [roomTask, setRoomTask] = useState<PrivateTask | null>(null);
   const isLate = makeIsLate(data.task_templates, t);
 
@@ -186,7 +186,6 @@ export default function CalendarPage() {
         <Beige>
           <div className="filters" style={{ paddingBottom: 10 }}>
             <button className="chip" aria-pressed={show.tasks} onClick={() => toggle('tasks')}>Tâches</button>
-            <button className="chip" aria-pressed={show.forecast} onClick={() => toggle('forecast')}>Prévisions</button>
             <button className="chip" aria-pressed={show.maintenance} onClick={() => toggle('maintenance')}>Entretien</button>
             <button className="chip" aria-pressed={show.reimb} onClick={() => toggle('reimb')}>Remboursements</button>
             <button className="chip" aria-pressed={show.expenses} onClick={() => toggle('expenses')}>Dépenses</button>
@@ -271,10 +270,8 @@ export default function CalendarPage() {
 
       {view !== 'month' && <div className="legend">
         {memberIds.map((m, i) => <span key={m}><i className={i === 0 ? 'bar-a' : 'bar-b'} />{name(m)}</span>)}
-        <span><i style={{ background: 'var(--vert)' }} />Argent</span>
+        <span><i style={{ background: 'var(--peche)' }} />Argent</span>
         <span><i style={{ background: 'var(--jaune)' }} />Entretien</span>
-        <span><i style={{ border: '1px dashed var(--border-strong)' }} />Prévision non planifiée</span>
-        <span>✦ proposée</span>
       </div>}
     </div>
   );

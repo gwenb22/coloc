@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useData } from '../store';
 import { backend, leaveDemo } from '../backend';
@@ -24,6 +24,11 @@ export default function Layout({ children }: { children: ReactNode }) {
   const loc = useLocation();
   const [menu, setMenu] = useState(false);
   useRecurringGenerator();
+  // Nouvelle page : revenir en haut (sur mobile, c'est la zone principale qui défile)
+  useEffect(() => {
+    document.querySelector('.main')?.scrollTo(0, 0);
+    window.scrollTo(0, 0);
+  }, [loc.pathname]);
   const unread = data.notifications.filter((n) => !n.read_at).length;
   const pendingSwaps = data.swap_requests.filter((s) => s.status === 'pending' && s.to_user === meId).length;
   const myLate = data.task_occurrences.filter((o) => o.assigned_to === meId && !o.proposed && isOpen(o) && o.due_date < today()).length;
