@@ -648,3 +648,10 @@ img.auth-logo { border-radius: 14px; width: 60px; height: 60px; }
   /* Bande de fond fixe sous l'heure et la batterie (le contenu ne passe pas sous l'horloge) */
   .app::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--bg); z-index: 40; pointer-events: none; }
 }
+
+@media (max-width: 860px) {
+  /* Aucun élément de la zone qui défile n'est comprimé (l'en-tête gardait 56 px et débordait sur le contenu) */
+  .main > * { flex-shrink: 0; }
+  .topbar { padding-bottom: 12px; }
+  .content { padding-top: 16px; }
+}
