@@ -634,3 +634,10 @@ img.auth-logo { border-radius: 14px; width: 60px; height: 60px; }
   .main { height: 100%; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: contain; -webkit-overflow-scrolling: touch; }
   .main > .content { flex-shrink: 0; }
 }
+
+@media (max-width: 860px) {
+  /* En-tête collé tout en haut de la zone qui défile ; la marge de l'encoche est dans son propre fond (opaque) */
+  .main { padding-top: 0; }
+  .main::before { display: none; }
+  .topbar { position: sticky; top: 0; padding-top: calc(env(safe-area-inset-top) + 8px); background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; z-index: 20; }
+}

@@ -62,6 +62,14 @@ export default function Layout({ children }: { children: ReactNode }) {
       </aside>
 
       <div className="main">
+        <header className="topbar mhead">
+          <NavLink to="/notifications" className="round-btn" aria-label={`Notifications (${unread} non lues)`}>
+            <Icon name="bell" size={18} />
+            {unread + pendingSwaps > 0 && <span className="dot" />}
+          </NavLink>
+          <h1 className="ellipsis">{title}</h1>
+          <NavLink to="/parametres" className={`avatar-btn ${personClass(meId)}`} aria-label="Profil et paramètres">{name(meId).slice(0, 1).toUpperCase()}</NavLink>
+        </header>
         {!online && (
           <div className="banner offline" role="alert">
             <Icon name="wifiOff" size={16} /> Hors ligne : consultation seule. Les modifications nécessitent une connexion.
@@ -74,14 +82,6 @@ export default function Layout({ children }: { children: ReactNode }) {
             {import.meta.env.VITE_SUPABASE_URL && <button className="btn btn-sm btn-ghost" onClick={leaveDemo}>Quitter la démo</button>}
           </div>
         )}
-        <header className="topbar mhead">
-          <NavLink to="/notifications" className="round-btn" aria-label={`Notifications (${unread} non lues)`}>
-            <Icon name="bell" size={18} />
-            {unread + pendingSwaps > 0 && <span className="dot" />}
-          </NavLink>
-          <h1 className="ellipsis">{title}</h1>
-          <NavLink to="/parametres" className={`avatar-btn ${personClass(meId)}`} aria-label="Profil et paramètres">{name(meId).slice(0, 1).toUpperCase()}</NavLink>
-        </header>
         <main className="content">{children}</main>
       </div>
 
