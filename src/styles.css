@@ -641,3 +641,10 @@ img.auth-logo { border-radius: 14px; width: 60px; height: 60px; }
   .main::before { display: none; }
   .topbar { position: sticky; top: 0; padding-top: calc(env(safe-area-inset-top) + 8px); background: var(--bg); -webkit-backdrop-filter: none; backdrop-filter: none; z-index: 20; }
 }
+
+@media (max-width: 860px) {
+  /* L'en-tête fait partie de la page : il remonte avec le contenu au défilement */
+  .topbar { position: relative; top: auto; }
+  /* Bande de fond fixe sous l'heure et la batterie (le contenu ne passe pas sous l'horloge) */
+  .app::before { content: ''; position: fixed; top: 0; left: 0; right: 0; height: env(safe-area-inset-top); background: var(--bg); z-index: 40; pointer-events: none; }
+}
